@@ -1,5 +1,7 @@
 # go2rtc Viewer Wall
 
+**中文** | [English](README.en.md)
+
 把 go2rtc 的多個串流同時顯示在一個網頁牆面上，版面與互動鏡射自
 [opencast-grid](https://github.com/kingwap99/opencast-grid)（IPTV Wall 的網頁版），
 播放核心沿用 go2rtc 的 [VideoRTC](https://github.com/AlexxIT/go2rtc)
@@ -20,8 +22,8 @@
 - 自訂 go2rtc 網址（程式內的預設值只是範例，請在右上角 ⚙️ 設定裡改成你的 go2rtc 位址）
 - 從 go2rtc 串流清單勾選要顯示的攝像頭，可排序、搜尋、一次選取「在線」
 - 自動選擇「H.264 可播對應檔」：HEVC 原生串流自動改用設定中既有的
-  #video=h264 轉碼檔（no15 -> no15_h264、backyard -> backyard_h264、
-  rsliving -> rsliving_h264），選單中會以「→」標示；
+  #video=h264 轉碼檔（例如 `cam1` -> `cam1_h264`，名字自己取），
+  選單中會以「→」標示；
   沒有對應檔的會 12 秒沒畫面後自動降級 MJPEG
 - 選擇、版面、大視窗與音量**存在伺服器端共用一份**（`wall.json`），
   換一台電腦／換一個瀏覽器打開看到的牆面完全一樣；localStorage 只是離線後備
