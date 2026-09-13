@@ -1,82 +1,86 @@
 # go2rtc Viewer Wall
 
-**中文** | [English](README.en.md)
+**English** | [中文](README.zh-TW.md)
 
-把 go2rtc 的多個串流同時顯示在一個網頁牆面上，版面與互動鏡射自
-[opencast-grid](https://github.com/kingwap99/opencast-grid)（IPTV Wall 的網頁版），
-播放核心沿用 go2rtc 的 [VideoRTC](https://github.com/AlexxIT/go2rtc)
-（WebRTC -> MSE -> HLS -> MJPEG 自動降級）。
+Show many go2rtc streams at once on a single web wall. The layout and
+interactions mirror [opencast-grid](https://github.com/kingwap99/opencast-grid)
+(the web version of an IPTV wall), and playback is built on go2rtc's
+[VideoRTC](https://github.com/AlexxIT/go2rtc)
+(automatic WebRTC -> MSE -> HLS -> MJPEG fallback).
 
-## 版面（重點）
+## Layout
 
-- 中央大視窗（Hero）+ 外圈小視窗（Mini），如同 opencast-grid 的 Hero/Ring 設計
-- 5×5 = 中間 1 個大視窗 + 外圈 16 個小視窗
-  4×4 = 12 個外圈、6×6 = 20 個、7×7 = 24 個
-- 點任一小視窗 → 切換成中央大視窗（同一串流 session 沿用，音訊淡入淡出）
-- 大視窗單按 → 全螢幕；再按或 Esc → 恢復原本版面（記憶模式與頁數）
-- 超過外圈上限時自動翻頁（‹ 1/3 ›，或鍵盤 ←/→）
-- 大視窗專屬控制：聲音、全部暫停/播放、移除；音量滑桿
+- One centre hero window + a ring of mini windows, like the Hero/Ring design in opencast-grid
+- 5x5 = 1 centre hero + 16 mini windows
+  4x4 = 12 mini, 6x6 = 20 mini, 7x7 = 24 mini
+- Click any mini window to swap it into the centre hero (the same stream session is kept, audio fades in/out)
+- Click the hero once for fullscreen; click again or press Esc to go back to the previous layout (mode and page are remembered)
+- Extra cameras beyond one ring are paged (`< 1/3 >`, or arrow keys)
+- Hero-only controls: sound, pause/resume all, remove; volume slider
 
-## 其他功能
+## Other features
 
-- 自訂 go2rtc 網址（程式內的預設值只是範例，請在右上角 ⚙️ 設定裡改成你的 go2rtc 位址）
-- 從 go2rtc 串流清單勾選要顯示的攝像頭，可排序、搜尋、一次選取「在線」
-- 自動選擇「H.264 可播對應檔」：HEVC 原生串流自動改用設定中既有的
-  #video=h264 轉碼檔（例如 `cam1` -> `cam1_h264`，名字自己取），
-  選單中會以「→」標示；
-  沒有對應檔的會 12 秒沒畫面後自動降級 MJPEG
-- 選擇、版面、大視窗與音量**存在伺服器端共用一份**（`wall.json`），
-  換一台電腦／換一個瀏覽器打開看到的牆面完全一樣；localStorage 只是離線後備
-- 每個小視窗的連接模式（RTC/MSE/HLS/MJPEG）與離線燈號即時顯示
+- Custom go2rtc URL (the built-in default is only an example, set yours in the gear menu)
+- Tick the cameras you want from the go2rtc stream list, with search, reordering and a "select all online" button
+- Automatic "H.264 playable counterpart": a HEVC-only stream is transparently replaced by an
+  existing `#video=h264` transcode of the same camera (e.g. `cam1` -> `cam1_h264`);
+  the picker marks those with `->`. Streams without a counterpart fall back to MJPEG
+  after 12 seconds without a picture
+- Selection, layout, hero and volume are **stored in one shared server-side file** (`wall.json`),
+  so another computer or another browser sees exactly the same wall; localStorage is only an offline fallback
+- Each mini window shows its live connection mode (RTC/MSE/HLS/MJPEG) and an offline badge
 
-## 切換不再重新載入
+## Switching no longer reloads anything
 
-- 每台攝像頭只有一個常駐元素（`.channel`），內部 `<video>`／WebSocket 從頭到尾不變。
-  切換大/小視窗、進出全螢幕、換版面（4×4 ↔ 5×5）只改 `left/top/width/height` 與 class，
-  因此畫面不會中斷、不會閃黑、也不會重新連線。
-- 只有「翻頁到不在本頁的相機」或「移除相機」才會真的釋放連線。
-- 真的無訊號（連 MJPEG 都拿不到畫面）時，最多每 60 秒用完整協定鏈重試一次、最多 3 次，
-  避免一次短暫壅塞就被永久鎖在「無訊號」。
-- 靜態檔（index.html / js / css）回應 `Cache-Control: no-cache`：
-  一般重新整理就會拿到最新版本，不必清快取。
+- Each camera has exactly one long-lived element (`.channel`) whose `<video>`/WebSocket never changes.
+  Switching hero/mini, entering or leaving fullscreen and changing the grid (4x4 <-> 5x5) only update
+  `left/top/width/height` and classes, so the picture never breaks, never flashes black and never reconnects.
+- Only paging to a camera that is not on the current page, or removing a camera, really releases a connection.
+- When a stream is genuinely dead (not even MJPEG gives a picture) it is retried with the full
+  protocol chain at most once every 60 seconds, up to 3 times, so one short congestion spike does not
+  lock a tile on "no signal" forever.
+- Static files (index.html / js / css) are served with `Cache-Control: no-cache`, so a normal
+  browser reload is enough to pick up a new build.
 
-## 共用設定（多台電腦看到同一面牆）
+## Shared settings (one wall across multiple computers)
 
-- `GET /api/wall` / `PUT /api/wall`，存成 `wall.json`（與 server.py 同目錄）
-- 欄位：`selected`（相機順序）、`mode`（4x4/5x5/6x6/7x7）、`page`、
-  `featured`（大視窗）、`vol`（音量），另有 `updated` 時間戳
-- 前端每 4 秒輪詢一次；別台電腦改了版面／選台／音量，這裡大約 4 秒內跟著變
-- 只送出「與伺服器現況不同」的欄位，避免多分頁互相回寫造成乒乓
-- 第一次開啟（伺服器還沒有 wall.json）時，會把該瀏覽器原本的 localStorage 內容推上去，
-  所以舊的使用者不用重新選一次
+- `GET /api/wall` / `PUT /api/wall`, stored as `wall.json` next to server.py
+- Fields: `selected` (camera order), `mode` (4x4/5x5/6x6/7x7), `page`,
+  `featured` (hero camera), `vol` (volume), plus an `updated` timestamp
+- The front end polls every 4 seconds, so a layout / camera / volume change made on another
+  computer shows up here within about 4 seconds
+- It only sends fields that actually differ from the server state, to avoid write ping-pong between tabs
+- On the very first load (no `wall.json` yet) the browser pushes its own localStorage content,
+  so existing users do not have to re-pick their cameras
 
-## 執行
+## Run
 
-只需要 Python 3（標準庫，無第三方套件）：
+Python 3 only (standard library, no third-party packages):
 
-    python3 server.py [port]      # 預設 8082
+    python3 server.py [port]      # default 8082
 
-瀏覽 http://機器IP:8082/ 。
+Then open http://<this-machine>:8082/ .
 
-## 為什麼需要這台伺服器
+## Why a server is needed
 
-- go2rtc 的 api/streams 沒有 CORS header，跨來源 fetch 會被瀏覽器擋下
-- go2rtc 的 WebSocket 會拒絕帶 Origin 的握手（403），瀏覽器一定帶 Origin
+- go2rtc's api/streams sends no CORS header, so a cross-origin fetch is blocked by the browser
+- go2rtc's WebSocket rejects handshakes that carry an Origin header (403), and browsers always send one
 
-因此本伺服器做兩件事：代理 api/streams（含設定切換），並把 WebSocket
-中繼到 go2rtc（網頁全部走同源 :8082，使用者也可以換任何 go2rtc 位址）。
+So this server does two things: it proxies api/streams (including settings changes) and relays
+the WebSocket to go2rtc, keeping the whole page same-origin on :8082. You can still point it at any go2rtc.
 
-## 安裝為常駐服務（macOS）
+## Install as a service (macOS)
 
-    bash install.sh     # 立即啟動 + 設定為 launchd system daemon（需 sudo）
+    bash install.sh     # start now + register as a launchd system daemon (needs sudo)
 
-## 檔案
+## Files
 
-    server.py       HTTP + WebSocket 代理（Python 標準庫）
-    index.html      牆面頁面
-    css/style.css   樣式（Hero + 外圈版面）
-    js/app.js       牆面邏輯（鏡射 opencast-grid 互動）
-    js/video-rtc.js go2rtc 播放核心（v1.9.14 原廠未改）
-    assets/icon.svg 圖示
-    settings.json   目前設定的 go2rtc 網址（自動產生）
-    wall.json       共用牆面設定（選台／版面／大視窗／音量，自動產生）
+    server.py       HTTP + WebSocket proxy (Python standard library)
+    index.html      the wall page
+    css/style.css   styling (hero + ring layout)
+    js/app.js       wall logic (mirrors the opencast-grid interactions)
+    js/video-rtc.js go2rtc playback core (v1.9.14, unmodified)
+    assets/icon.svg icon
+    README.md       this document (English; 中文版在 README.zh-TW.md)
+    settings.json   the configured go2rtc URL (generated automatically)
+    wall.json       shared wall settings (cameras / layout / hero / volume, generated automatically)
