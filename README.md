@@ -1,7 +1,5 @@
 # go2rtc Viewer Wall
 
-**English** | [中文](README.zh-TW.md)
-
 Show many go2rtc streams at once on a single web wall. The layout and
 interactions mirror [opencast-grid](https://github.com/kingwap99/opencast-grid)
 (the web version of an IPTV wall), and playback is built on go2rtc's
@@ -81,6 +79,6 @@ the WebSocket to go2rtc, keeping the whole page same-origin on :8082. You can st
     js/app.js       wall logic (mirrors the opencast-grid interactions)
     js/video-rtc.js go2rtc playback core (v1.9.14, unmodified)
     assets/icon.svg icon
-    README.md       this document (English; 中文版在 README.zh-TW.md)
+    README.md       this document
     settings.json   the configured go2rtc URL (generated automatically)
     wall.json       shared wall settings (cameras / layout / hero / volume, generated automatically)
