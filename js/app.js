@@ -2,13 +2,13 @@ import {VideoRTC} from './video-rtc.js';
 
 /* =====================================================================
  * go2rtc Viewer Wall
- * 版面與互動鏡射自 opencast-grid（kingwap99）的核心設計：
- *   - 中央大視窗（Hero）＋ 外圈小視窗（Mini）
- *   5×5 = 中間 1 個大視窗 + 外圈 16 個小視窗（4×4: 12 個、6×6: 20 個、7×7: 24 個）
- *   - 點小視窗 → 切換成中央大視窗（同一個播放 session 沿用）
- *   - 大視窗單按 → 全螢幕，再按/Esc 恢復
- *   - 翻頁（‹ 1/2 ›）、音訊淡入淡出
- * 播放核心沿用 go2rtc 的 VideoRTC（WebRTC → MSE → HLS → MJPEG）
+ * Layout and interactions mirror the core design of opencast-grid (kingwap99):
+ *   - a centre hero window plus a ring of mini windows
+ *   5x5 = 1 centre hero + 16 minis (4x4: 12, 6x6: 20, 7x7: 24)
+ *   - click a mini -> it becomes the centre hero (same playback session kept)
+ *   - click the hero -> fullscreen; click again or Esc to go back
+ *   - paging (< 1/2 >), audio fade in/out
+ * Playback is built on go2rtc's VideoRTC (WebRTC -> MSE -> HLS -> MJPEG).
  * ===================================================================== */
 
 const $ = sel => document.querySelector(sel);
@@ -42,16 +42,16 @@ const LS = {
   vol: 'g2rwall:vol',
 };
 
-/* 牆面共用設定：真正的一份存在伺服器端 /api/wall（所有瀏覽器共用），
-   localStorage 降級成「離線後備快取」，不再是最終依據。
-   —— 換一台電腦／換一個瀏覽器打開，看到的牆面完全一樣。 */
+/* Shared wall settings: the real copy lives on the server (/api/wall) and every browser
+   shares it. localStorage is demoted to an offline fallback, no longer the source of truth,
+   so another computer or another browser opens exactly the same wall. */
 let wallServer = {selected: [], mode: '5x5', page: 0, featured: null, vol: 0.7, updated: 0};
 let wallPushTimer = null;
 const wallPending = {};
 
 function wallKey(value) { return JSON.stringify(value); }
 
-/* 只送出與伺服器現況不同的欄位；相同就不送，避免多個瀏覽器互相回寫造成乒乓 */
+/* Only send fields that differ from the server state, so browsers cannot ping-pong writes */
 function pushWall(patch) {
   let dirty = false;
   for (const [key, value] of Object.entries(patch)) {
@@ -78,10 +78,10 @@ async function flushWall() {
     });
     const data = await res.json();
     if (data && typeof data.updated === 'number') wallServer = {...wallServer, ...data};
-  } catch (e) { /* 伺服器不可用時，localStorage 後備仍然有效 */ }
+  } catch (e) { /* when the server is down the localStorage fallback still works */ }
 }
 
-/* 套用共用設定到本機狀態並同步 UI；doRender=false 表示只更新狀態不重繪 */
+/* Apply shared settings to the local state and sync the UI; doRender=false skips the redraw */
 function applyWallState(w, doRender = true) {
   if (Array.isArray(w.selected)) state.selected = w.selected.slice();
   if (['4x4', '5x5', '6x6', '7x7'].includes(w.mode)) state.mode = w.mode;
@@ -105,7 +105,7 @@ function applyWallState(w, doRender = true) {
   if (doRender) render();
 }
 
-/* 讀取伺服器上的共用設定；updated=0 代表從沒存過（改用 localStorage 後備） */
+/* Read the shared settings from the server; updated=0 means never saved (use the fallback) */
 async function loadWall() {
   try {
     const data = await api('/api/wall');
@@ -113,11 +113,11 @@ async function loadWall() {
       wallServer = {...wallServer, ...data};
       return data.updated > 0 ? data : null;
     }
-  } catch (e) { /* 忽略，走後備 */ }
+  } catch (e) { /* ignore and use the fallback */ }
   return null;
 }
 
-/* 輪詢共用設定，讓其他分頁／電腦的改動自動反映過來 */
+/* Poll the shared settings so changes from other tabs or computers show up here */
 async function pollWall() {
   if (wallPushTimer || Object.keys(wallPending).length > 0) return;
   try {
@@ -127,15 +127,15 @@ async function pollWall() {
       wallServer = {...wallServer, ...data};
       applyWallState(data);
     }
-  } catch (e) { /* 忽略 */ }
+  } catch (e) { /* ignore */ }
 }
 
 const state = {
   go2rtc: '',
-  streams: {},           // name -> go2rtc api/streams 資料
-  aliases: {},           // name -> h264 可播對應串流（或自身）
+  streams: {},           // name -> go2rtc api/streams payload
+  aliases: {},           // name -> playable h264 counterpart (or itself)
   streamsError: null,
-  selected: [],          // 依序排列的攝像頭名稱
+  selected: [],          // camera names, in wall order
   mode: localStorage.getItem(LS.mode) || '5x5',
   page: Number(localStorage.getItem(LS.page) || 0),
   featured: localStorage.getItem(LS.featured) || null,
@@ -145,10 +145,10 @@ const state = {
   paused: false,
   heroMuted: false,
   heroVolume: Number(localStorage.getItem(LS.vol) || 0.7),
-  autoFocus: false,      // 是否已自動把大視窗換到有畫面的相機
+  autoFocus: false,      // whether the hero was already moved to a camera with a picture
   pools: new Map(),      // name -> {name, eff, st, forcedMJPEG, lastMode}
-  views: new Map(),      // name -> 常駐的 .channel 元素（切換大小視窗只換位置，不重建）
-  heroSlot: null,        // 外圈顯示「目前大視窗」的空位
+  views: new Map(),      // name -> long-lived .channel element (swapping only moves it)
+  heroSlot: null,        // the ring slot that shows which camera is currently the hero
   heroPlayer: null,
   statusTimer: null,
   streamTimer: null,
@@ -156,7 +156,7 @@ const state = {
   hideTimer: null,
 };
 
-/* ---------------- 播放元素（VideoRTC 包裝） ---------------- */
+/* ---------------- playback element (VideoRTC wrapper) ---------------- */
 class WallStream extends VideoRTC {
   oninit() {
     super.oninit();
@@ -164,18 +164,18 @@ class WallStream extends VideoRTC {
     this.video.muted = true;
   }
 
-  /* VideoRTC 原本要等元素連上 DOM 才在 oninit() 建立 this.video，
-     但這個牆面的 Hero / Mini 共用同一個 play session，會在元素還沒進頁面時
-     就設定靜音與音量（未進 DOM 的 this.video 會是 null 而丟錯），
-     所以這裡提供一個「先確保 <video> 存在」的入口。 */
+  /* Upstream VideoRTC only creates this.video in oninit(), which needs the element to be
+     connected to the DOM. This wall shares one play session between hero and mini and sets
+     mute/volume before the element enters the page (this.video would still be null and
+     throw), so expose an entry point that makes sure <video> exists first. */
   ensureVideo() {
     if (!this.video) this.oninit();
     return this;
   }
 
   onopen() {
-    // 降級 MJPEG 或換頁釋放時，舊 socket 的 open 事件可能晚一步才到，
-    // 此時 this.ws 已被 ondisconnect() 清空，直接結束避免丟錯中斷。
+    // After an MJPEG fallback or a page release the old socket's open event can arrive late;
+    // this.ws is already cleared by ondisconnect(), so bail out instead of throwing.
     if (!this.ws || !this.video) return;
     const result = super.onopen();
     this.onmessage['stream'] = msg => {
@@ -188,10 +188,10 @@ class WallStream extends VideoRTC {
     return result;
   }
 
-  /* 降級 MJPEG 時我們會主動 ondisconnect()+onconnect()，
-     舊 socket 的 close 事件常常晚於新連線才送達，
-     若不忽略就會把新連線的 this.ws 清成 null（接著 onopen 直接丟錯）。
-     只有「目前這個 socket 真的已經關閉」時才交給原本的 onclose 去重連。 */
+  /* An MJPEG fallback calls ondisconnect()+onconnect() ourselves, and the old socket's close
+     event often arrives after the new connection was made. Ignoring that would wipe the new
+     this.ws to null (and the next onopen would throw), so only hand over to the original
+     onclose when the socket being closed really is the current one. */
   onclose() {
     if (this.ws && this.ws.readyState !== WebSocket.CLOSED) return false;
     return super.onclose();
@@ -206,7 +206,7 @@ class WallStream extends VideoRTC {
 }
 customElements.define('wall-stream', WallStream);
 
-/* ---------------- 工具 ---------------- */
+/* ---------------- helpers ---------------- */
 function modeCount() { return {'4x4': 4, '5x5': 5, '6x6': 6, '7x7': 7}[state.mode] || 5; }
 function visiblePageSize() { return 4 * modeCount() - 4; }
 function pageCount() { return Math.max(1, Math.ceil(state.selected.length / visiblePageSize())); }
@@ -255,14 +255,14 @@ async function api(path, options = {}) {
   return res.json();
 }
 
-/* ---------------- 狀態讀取 ---------------- */
+/* ---------------- state loading ---------------- */
 async function loadSettings() {
   try {
     const data = await api('/api/settings');
     state.go2rtc = data.go2rtc || data.default || '';
-    $('#g2r-url').textContent = 'go2rtc：' + state.go2rtc;
+    $('#g2r-url').textContent = 'go2rtc: ' + state.go2rtc;
   } catch (e) {
-    toast('無法讀取伺服器設定');
+    toast('cannot read server settings');
   }
 }
 
@@ -278,11 +278,11 @@ async function refreshStreams(silent = true) {
       state.aliases = data.aliases || {};
       if (data.go2rtc && data.go2rtc !== state.go2rtc) {
         state.go2rtc = data.go2rtc;
-        $('#g2r-url').textContent = 'go2rtc：' + state.go2rtc;
+        $('#g2r-url').textContent = 'go2rtc: ' + state.go2rtc;
       }
     }
   } catch (e) {
-    state.streamsError = '無法連線伺服器';
+    state.streamsError = 'cannot reach server';
     state.streams = {};
   }
   if (!silent) { renderStreamList(); renderSelectedList(); }
@@ -298,13 +298,13 @@ function updateSummary() {
     el.textContent = '⚠ ' + state.streamsError;
     el.style.color = '#eab308';
   } else {
-    el.textContent = names.length ? '在線 ' + on + ' / ' + names.length + '　已選 ' + state.selected.length : '';
+    el.textContent = names.length ? 'online ' + on + ' / ' + names.length + '  ·  selected ' + state.selected.length : '';
     el.style.color = '';
   }
 }
 
-/* ---------------- 播放池 ---------------- */
-/* 完整協定鏈：優先用不轉檔的 WebRTC/MSE，失敗才退回 MJPEG */
+/* ---------------- playback pool ---------------- */
+/* Full protocol chain: prefer untranscoded WebRTC/MSE and only fall back to MJPEG */
 const FULL_MODES = 'webrtc,mse,hls,mjpeg';
 
 function getPool(name) {
@@ -315,15 +315,17 @@ function getPool(name) {
   st.media = 'video,audio';
   st.visibilityThreshold = 0;
   st.visibilityCheck = false;
-  // background = true：不再因為元素被抽離 DOM 而斷線。
-  // 每次重繪 surface 都會抽離所有播放元素，若照 VideoRTC 預設會排程 ondisconnect，
-  // 造成 MediaSource 被拆掉後 updateend 還在跑（SourceBuffer InvalidStateError）與反覆重連。
-  // 連線生命週期改由本檔的播放池決定（換頁釋放、移除相機時 dropPool）。
+  // background = true: the connection no longer dies when the element leaves the DOM.
+  // Every surface redraw detaches all playback elements and the VideoRTC default would
+  // schedule ondisconnect, tearing down the MediaSource while updateend is still running
+  // (SourceBuffer InvalidStateError) and reconnecting over and over. The connection
+  // lifecycle is owned by the pool in this file instead (dropPool on paging / removal).
   st.background = true;
   st.ensureVideo();
   st.src = '/api/ws?src=' + encodeURIComponent(eff);
   const entry = {name, eff, st, forcedMJPEG: false, lastMode: '—', dead: false, mediaErrored: false, reviveAt: 0, reviveCount: 0};
-  // 只認「切到 MJPEG 之後」才發生的解碼錯誤，避免 MSE 階段的舊錯誤誤判成無訊號
+  // Only count decode errors that happen after the MJPEG switch, so a stale MSE error is
+  // not mistaken for "no signal"
   st.video.addEventListener('error', () => { entry.mediaErrored = true; });
   st.addEventListener('wallmode', e => { entry.lastMode = e.detail; refreshBadges(); });
   state.pools.set(name, entry);
@@ -356,10 +358,10 @@ function fadeVolume(video, target, duration) {
   });
 }
 
-/* ---------------- 版面繪製 ---------------- */
-/* 元素常駐架構：每台相機只有一個 .channel 元素（內含自己的 <wall-stream>），
-   切換大/小視窗只改 left/top/width/height 與 .is-hero 類別，
-   <video> 永遠不會離開它的父元素 → 不會重新連線、不會閃黑、不會中斷畫面。 */
+/* ---------------- layout drawing ---------------- */
+/* Persistent elements: each camera has exactly one .channel element (holding its own
+   <wall-stream>). Switching hero/mini only changes left/top/width/height and the .is-hero
+   class, so the <video> never leaves its parent -> no reconnect, no black flash, no break. */
 function placeChannel(el, box) {
   el.style.left = box.left + 'px';
   el.style.top = box.top + 'px';
@@ -383,7 +385,8 @@ function removeView(name) {
   state.views.delete(name);
 }
 
-/* 外圈那個「目前大視窗」的空位（與 opencast-grid 相同：大視窗仍佔一個外圈格位） */
+/* The ring slot that shows the current hero (as in opencast-grid, the hero still occupies
+   one ring slot) */
 function ensureHeroSlot() {
   if (state.heroSlot) return state.heroSlot;
   const index = element('span');
@@ -391,13 +394,13 @@ function ensureHeroSlot() {
   const slot = element('div', {className: 'hero-slot hidden'},
     element('div', {className: 'mini-placeholder'},
       element('div', {className: 'flag', text: '🎥'}),
-      element('div', {text: '目前大視窗'}),
+      element('div', {text: 'current hero'}),
     ),
     element('div', {className: 'mini-overlay'},
       element('div', {className: 'mini-topline'}, index,
         element('span', {className: 'mini-live'}, element('span', {className: 'live-dot on'}))),
       element('div', {className: 'mini-bottomline'}, name,
-        element('span', {className: 'mini-status mode', text: '大視窗'})),
+        element('span', {className: 'mini-status mode', text: 'Hero'})),
     ),
   );
   slot._index = index;
@@ -407,7 +410,7 @@ function ensureHeroSlot() {
   return slot;
 }
 
-/* 釋放不在本頁的播放 session 與元素（換頁／移除相機才用得到） */
+/* Release playback sessions and elements that are not on this page (paging / removal) */
 function releaseOtherPages(page) {
   const keep = new Set(page);
   for (const key of [...state.pools.keys()]) if (!keep.has(key)) dropPool(key);
@@ -453,11 +456,11 @@ function render() {
     const el = ensureChannel(name);
     const isHero = name === featured;
     el._parts.index.textContent = '#' + String(state.selected.indexOf(name) + 1).padStart(2, '0');
-    el._parts.status.textContent = isHero ? '大視窗' : (state.pools.get(name).lastMode || '—');
+    el._parts.status.textContent = isHero ? 'Hero' : (state.pools.get(name).lastMode || '—');
     el.classList.toggle('is-hero', isHero);
 
     if (state.fullscreen) {
-      // 全螢幕只留下大視窗，其餘元素隱藏但連線仍在（回來時不必重連）
+      // in fullscreen keep only the hero; the rest stay hidden but connected (no reconnect)
       el.classList.toggle('hidden', !isHero);
       el.classList.toggle('is-fullscreen', isHero);
       if (isHero) { el.style.left = ''; el.style.top = ''; el.style.width = ''; el.style.height = ''; }
@@ -482,7 +485,7 @@ function render() {
     slot._name.textContent = featured;
   }
 
-  // 小視窗一律靜音，只有大視窗套用設定音量
+  // minis are always muted, only the hero uses the configured volume
   for (const entry of state.pools.values()) {
     if (entry.st.video) entry.st.video.muted = true;
   }
@@ -498,8 +501,9 @@ function render() {
   showControls();
 }
 
-/* 一台相機 = 一個常駐元素：同時具備小視窗與大視窗的外觀，用 .is-hero 切換。
-   <wall-stream> 只建立一次，之後切換大小視窗只會改變這個元素的位置與大小。 */
+/* One camera = one persistent element that can look like a mini or like the hero,
+   switched by .is-hero. <wall-stream> is created once; swapping only moves and resizes
+   this same element. */
 function createChannel(name) {
   const entry = getPool(name);
   const el = element('div', {className: 'channel', 'data-cam': name});
@@ -513,32 +517,32 @@ function createChannel(name) {
       element('span', {className: 'mini-name', text: name}), status),
   );
   const loading = element('div', {className: 'mini-loading'},
-    element('div', {className: 'spinner'}), '連線中…');
+    element('div', {className: 'spinner'}), 'connecting…');
 
-  const miniRemove = element('button', {className: 'mini-remove', text: '✕', title: '從牆面移除'});
+  const miniRemove = element('button', {className: 'mini-remove', text: '✕', title: 'Remove from wall'});
   miniRemove.addEventListener('click', ev => { ev.stopPropagation(); removeCamera(name); });
 
-  const heroMode = element('div', {className: 'hero-mode', text: '大視窗 · ' + entry.lastMode});
+  const heroMode = element('div', {className: 'hero-mode', text: 'Hero · ' + entry.lastMode});
   const info = element('div', {className: 'hero-info'},
     element('div', {className: 'hero-live'}, element('span', {className: 'live-dot'}), 'LIVE'),
     element('div', {className: 'hero-name', text: name}),
-    element('div', {className: 'hero-meta', text: '點擊放大 · 外圈點擊切換大視窗'}),
+    element('div', {className: 'hero-meta', text: 'click to enlarge · click a mini to swap'}),
   );
 
-  const sound = element('button', {className: 'hero-sound', text: state.heroMuted ? '🔇' : '🔊', title: '聲音'});
+  const sound = element('button', {className: 'hero-sound', text: state.heroMuted ? '🔇' : '🔊', title: 'Sound'});
   sound.addEventListener('click', ev => {
     ev.stopPropagation();
     state.heroMuted = !state.heroMuted;
     if (entry.st.video) entry.st.video.muted = state.heroMuted;
     sound.textContent = state.heroMuted ? '🔇' : '🔊';
   });
-  const pause = element('button', {className: 'hero-pause', text: state.paused ? '▶' : '⏸', title: '全部暫停'});
+  const pause = element('button', {className: 'hero-pause', text: state.paused ? '▶' : '⏸', title: 'Pause all'});
   pause.addEventListener('click', ev => {
     ev.stopPropagation();
     toggleAllPlayback();
     pause.textContent = state.paused ? '▶' : '⏸';
   });
-  const heroRemove = element('button', {className: 'hero-remove', text: '✕', title: '從牆面移除'});
+  const heroRemove = element('button', {className: 'hero-remove', text: '✕', title: 'Remove from wall'});
   heroRemove.addEventListener('click', ev => { ev.stopPropagation(); removeCamera(name); });
   const controls = element('div', {className: 'hero-controls'}, sound, pause, heroRemove);
 
@@ -582,8 +586,8 @@ function renderPageControls() {
   $('#surface').append(state.pageControls);
 }
 
-/* ---------------- 狀態燈號巡覽 ---------------- */
-/* 由 <video> 目前的來源判斷實際協定（go2rtc 的 WS 不一定會回報協定訊息） */
+/* ---------------- status badge sweep ---------------- */
+/* Guess the live protocol from the <video> source (go2rtc's WS does not always report it) */
 function detectMode(st) {
   const v = st.video;
   if (!v) return '—';
@@ -610,13 +614,13 @@ function refreshBadges() {
         loading.classList.toggle('hidden', live);
         const label = loading.lastChild;
         if (label && label.nodeType === Node.TEXT_NODE) {
-          label.textContent = entry.dead && !live ? '無訊號' : '連線中…';
+          label.textContent = entry.dead && !live ? 'no signal' : 'connecting…';
         }
       }
       const status = n.querySelector('.mini-status.mode');
-      if (status && status.textContent !== '大視窗') status.textContent = entry.lastMode;
+      if (status && status.textContent !== 'Hero') status.textContent = entry.lastMode;
       const heroMode = n.querySelector('.hero-mode');
-      if (heroMode) heroMode.textContent = '大視窗 · ' + entry.lastMode;
+      if (heroMode) heroMode.textContent = 'Hero · ' + entry.lastMode;
     });
   }
 }
@@ -628,7 +632,7 @@ function startTimers() {
       const st = entry.st;
       const live = st.video && st.video.videoWidth > 0;
       if (live) {
-        // 有畫面就回到乾淨狀態，之後若再斷線可以重新走完整協定鏈
+        // a picture means the tile is healthy again, so a later drop can retry the full chain
         entry.dead = false;
         entry.mediaErrored = false;
         entry.reviveAt = 0;
@@ -637,9 +641,9 @@ function startTimers() {
       }
       const waited = now - st.connectTS;
       if (entry.dead) {
-        // 卡死（連 MJPEG 都拿不到畫面）時隔一段時間用完整協定鏈重連一次，
-        // 避免一次短暫壅塞（大量分頁同時連線）就被永久鎖在無訊號。
-        // 最多重試 3 次，之後就不再打擾，讓它維持「無訊號」。
+        // When a tile is stuck (not even MJPEG gives a picture) retry the full protocol chain
+        // after a while, so one short congestion spike (many tabs connecting at once) cannot
+        // lock it on "no signal" forever. At most 3 retries, then leave it alone.
         if (entry.reviveCount >= 3) continue;
         if (!entry.reviveAt) entry.reviveAt = now + 60000;
         if (now >= entry.reviveAt) {
@@ -654,41 +658,44 @@ function startTimers() {
         }
         continue;
       }
-      // 已經降級 MJPEG 仍讓瀏覽器報錯（例：HEVC 完全無法解碼）→ 直接判定無訊號
+      // MJPEG is already in use and the browser still errors (e.g. HEVC cannot be decoded at
+      // all) -> declare it offline
       if (entry.forcedMJPEG && entry.mediaErrored && waited > 3000) {
         entry.dead = true;
         continue;
       }
       if (waited < 12000) continue;
       if (!entry.forcedMJPEG && (st.wsState === WebSocket.OPEN || st.pcState !== WebSocket.CLOSED)) {
-        // RTC/MSE 已連上但沒有畫面 → 降級 MJPEG（HEVC 沒有 H.264 對應版時常見）
+        // RTC/MSE connected but there is no picture -> fall back to MJPEG (common when an
+        // HEVC stream has no H.264 counterpart)
         entry.forcedMJPEG = true;
-        entry.mediaErrored = false;   // 重新計算 MJPEG 階段的錯誤
+        entry.mediaErrored = false;   // recount errors for the MJPEG stage
         st.mode = 'mjpeg';
         st.ondisconnect();
         st.onconnect();
         st.connectTS = Date.now();
       } else if (entry.forcedMJPEG && waited > 15000) {
-        entry.dead = true;   // 連 MJPEG 都拿不到畫面
+        entry.dead = true;   // not even MJPEG gives a picture
       }
     }
     autoFocusHero();
     refreshBadges();
   }, 2000);
   state.streamTimer = setInterval(() => refreshStreams(true), 15000);
-  // 共用設定輪詢：其他分頁／電腦改了牆面，這裡跟著動
+  // shared settings poll: follow changes made by other tabs or computers
   state.wallTimer = setInterval(pollWall, 4000);
 }
 
-/* 大視窗若卡在「確定沒畫面」的相機（常見：go2rtc 端的 HEVC 串流），
-   自動換到本頁第一個有畫面的相機；只自動切一次，之後完全由使用者點選決定。 */
+/* If the hero is stuck on a camera that definitely has no picture (commonly an HEVC stream
+   on the go2rtc side), move to the first camera on this page that does. This happens once,
+   after that the user decides. */
 function autoFocusHero() {
   if (state.autoFocus) return;
   const cur = state.pools.get(state.featured);
   if (!cur) return;
-  if (cur.st.video && cur.st.video.videoWidth > 0) return;   // 大視窗已經有畫面
+  if (cur.st.video && cur.st.video.videoWidth > 0) return;   // the hero already has a picture
   const waited = Date.now() - cur.st.connectTS;
-  // 明確失敗（解碼錯誤）或已判定無訊號，才讓位；否則再等等
+  // only give way on a clear failure (decode error) or a confirmed dead tile, otherwise wait
   if (!((cur.mediaErrored && waited > 4000) || cur.dead || waited > 15000)) return;
   const candidate = [...state.pools.values()].find(e => e !== cur && e.st.video && e.st.video.videoWidth > 0);
   if (!candidate) return;
@@ -696,7 +703,7 @@ function autoFocusHero() {
   setFeatured(candidate.name);
 }
 
-/* ---------------- 互動 ---------------- */
+/* ---------------- interaction ---------------- */
 async function setFeatured(name) {
   if (!name || state.featured === name) return;
   const oldHero = state.heroPlayer;
@@ -723,7 +730,7 @@ function removeCamera(name) {
   state.page = Math.min(state.page, pageCount() - 1);
   dropPool(name);
   render();
-  toast('已移除 ' + name);
+  toast('Removed ' + name);
 }
 
 function toggleAllPlayback() {
@@ -777,7 +784,7 @@ function showControls() {
   }, 5000);
 }
 
-/* ---------------- 攝像頭選擇視窗 ---------------- */
+/* ---------------- camera picker ---------------- */
 function openPicker() {
   if (state.fullscreen) toggleFullscreen();
   refreshStreams(false);
@@ -795,9 +802,9 @@ function renderStreamList() {
   const names = Object.keys(state.streams)
     .filter(n => !q || n.toLowerCase().includes(q))
     .sort((a, b) => (isOnline(b) - isOnline(a)) || a.localeCompare(b));
-  $('#picker-all-info').textContent = '（' + names.length + '）';
+  $('#picker-all-info').textContent = '(' + names.length + ')';
   if (names.length === 0) {
-    const msg = state.streamsError ? '⚠ ' + state.streamsError : (q ? '沒有符合的串流' : 'go2rtc 沒有串流');
+    const msg = state.streamsError ? '⚠ ' + state.streamsError : (q ? 'no matching streams' : 'go2rtc has no streams');
     list.append(element('div', {className: 'stream-row', text: msg}));
     return;
   }
@@ -807,7 +814,7 @@ function renderStreamList() {
       element('input', {type: 'checkbox', checked: state.selected.includes(name), 'data-name': name}),
       element('span', {className: 'dot' + (isOnline(name) ? ' on' : '')}),
       element('span', {className: 'row-name', text: name}),
-      element('span', {className: 'row-src', text: (isOnline(name) ? '在線' : '離線（選取後自動喚醒）') + (hint ? '　' + hint : '')}),
+      element('span', {className: 'row-src', text: (isOnline(name) ? 'online' : 'offline (wakes up when selected)') + (hint ? '  ' + hint : '')}),
     );
     row.querySelector('input').addEventListener('change', ev => {
       const n = ev.target.dataset.name;
@@ -827,9 +834,9 @@ function renderStreamList() {
 function renderSelectedList() {
   const list = $('#selected-list');
   list.innerHTML = '';
-  $('#picker-count').textContent = state.selected.length + ' 個已選';
+  $('#picker-count').textContent = state.selected.length + ' selected';
   if (state.selected.length === 0) {
-    list.append(element('div', {className: 'stream-row', text: '尚未選擇'}));
+    list.append(element('div', {className: 'stream-row', text: 'nothing selected yet'}));
     return;
   }
   state.selected.forEach((name, i) => {
@@ -837,8 +844,8 @@ function renderSelectedList() {
       element('span', {className: 'dot' + (isOnline(name) ? ' on' : '')}),
       element('span', {className: 'row-name', text: name}),
       element('div', {className: 'updown'},
-        element('button', {text: '↑', title: '往前', disabled: i === 0}),
-        element('button', {text: '↓', title: '往後', disabled: i === state.selected.length - 1}),
+        element('button', {text: '↑', title: 'Move up', disabled: i === 0}),
+        element('button', {text: '↓', title: 'Move down', disabled: i === state.selected.length - 1}),
       ),
     );
     const btns = row.querySelectorAll('.updown button');
@@ -860,7 +867,7 @@ function saveSelected() {
   updateSummary();
 }
 
-/* ---------------- 設定視窗 ---------------- */
+/* ---------------- settings dialog ---------------- */
 function openSettings() {
   $('#settings-url').value = state.go2rtc;
   $('#settings-status').textContent = '';
@@ -869,7 +876,7 @@ function openSettings() {
 }
 
 async function putSettings(url, dry) {
-  $('#settings-status').textContent = '連線測試中…';
+  $('#settings-status').textContent = 'testing connection…';
   $('#settings-status').className = 'settings-status';
   try {
     const res = await fetch('/api/settings' + (dry ? '?dry=1' : ''), {
@@ -882,29 +889,29 @@ async function putSettings(url, dry) {
     if (res.ok && data.ok) {
       status.className = 'settings-status ok';
       status.textContent = dry
-        ? '✅ 連線成功（' + data.streamCount + ' 個串流）'
-        : '✅ 已儲存，連到 ' + data.go2rtc + '（' + data.streamCount + ' 個串流）';
+        ? '✅ connected (' + data.streamCount + ' streams)'
+        : '✅ saved, connected to ' + data.go2rtc + ' (' + data.streamCount + ' streams)';
       if (!dry) {
         state.go2rtc = data.go2rtc;
-        $('#g2r-url').textContent = 'go2rtc：' + state.go2rtc;
+        $('#g2r-url').textContent = 'go2rtc: ' + state.go2rtc;
         for (const key of [...state.pools.keys()]) dropPool(key);
         render();
         refreshStreams(true);
-        toast('go2rtc 網址已更新');
+        toast('go2rtc URL updated');
       }
       return true;
     }
     status.className = 'settings-status err';
-    status.textContent = '❌ ' + (data.error || '失敗');
+    status.textContent = '❌ ' + (data.error || 'failed');
     return false;
   } catch (e) {
     $('#settings-status').className = 'settings-status err';
-    $('#settings-status').textContent = '❌ 無法連線伺服器';
+    $('#settings-status').textContent = '❌ cannot reach server';
     return false;
   }
 }
 
-/* ---------------- 鍵盤 ---------------- */
+/* ---------------- keyboard ---------------- */
 document.addEventListener('keydown', ev => {
   if (ev.key === 'Escape') {
     if (!document.getElementById('modal-picker').classList.contains('hidden')) closeModal('#modal-picker');
@@ -918,7 +925,7 @@ document.addEventListener('keydown', ev => {
   if (ev.key === 'ArrowRight') changePage(1);
 });
 
-/* ---------------- 事件綁定 ---------------- */
+/* ---------------- event binding ---------------- */
 function bindEvents() {
   document.querySelectorAll('#mode-group button').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === state.mode);
@@ -957,7 +964,7 @@ function bindEvents() {
     state.page = Math.min(state.page, pageCount() - 1);
     closeModal('#modal-picker');
     render();
-    toast('已更新牆面（' + state.selected.length + ' 個攝像頭）');
+    toast('Wall updated (' + state.selected.length + ' cameras)');
   });
 
   $('#settings-test').addEventListener('click', () => putSettings($('#settings-url').value.trim(), true));
@@ -972,13 +979,13 @@ function bindEvents() {
     m.addEventListener('click', ev => { if (ev.target === m) m.classList.add('hidden'); }));
 }
 
-/* ---------------- 啟動 ---------------- */
+/* ---------------- startup ---------------- */
 async function init() {
   try { state.selected = JSON.parse(localStorage.getItem(LS.selected) || '[]'); }
   catch (e) { state.selected = []; }
   await loadSettings();
   await refreshStreams(true);
-  // 牆面設定以伺服器共用的一份為準；伺服器還沒存過才用本機 localStorage 推上去
+  // the shared server copy wins; only seed it from this browser when the server has none
   const serverWall = await loadWall();
   if (serverWall) {
     applyWallState(serverWall, false);

@@ -22,7 +22,7 @@ button { cursor: pointer; }
 
 #app { display: flex; flex-direction: column; height: 100vh; }
 
-/* ---------------- 工具列 ---------------- */
+/* ---------------- toolbar ---------------- */
 #toolbar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
   min-height: 54px; padding: 8px 14px;
@@ -48,12 +48,13 @@ button { cursor: pointer; }
 .mode-group button.active { color: #000; background: var(--yellow); border-color: var(--yellow); font-weight: 700; }
 .summary { font-size: 11px; color: var(--muted); padding-left: 4px; }
 
-/* ---------------- 牆面（Hero + 外圈小視窗） ---------------- */
+/* ---------------- wall surface (hero + ring of minis) ---------------- */
 #wall-root { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #000; }
 .wall-surface { position: absolute; inset: 0; }
 
-/* 每個相機只有一個 .channel 元素（常駐）；切換大/小視窗只改 left/top/width/height，
-   所以 <video> 不會被搬動或重建，切換時畫面不中斷。 */
+/* Each camera owns exactly one long-lived .channel element; switching hero/mini only
+   changes left/top/width/height, so the <video> is never moved or rebuilt and the
+   picture never breaks during a swap. */
 .channel {
   position: absolute; overflow: hidden; border: 1px solid rgba(255,255,255,.15); border-radius: 9px;
   background: #111; z-index: 2; cursor: pointer;
@@ -67,7 +68,8 @@ button { cursor: pointer; }
 .channel video { opacity: 0; transition: opacity .25s; }
 .channel video.is-playing { opacity: 1; }
 
-/* 外圈顯示「目前大視窗」的空位（與 opencast-grid 相同，大視窗仍佔一個外圈格位） */
+/* Slot in the ring that shows the current hero (as in opencast-grid, the hero still
+   occupies one ring slot) */
 .hero-slot {
   position: absolute; overflow: hidden; border: 1px solid rgba(255,255,255,.15); border-radius: 9px;
   background: #111; z-index: 2; pointer-events: none;
@@ -103,7 +105,7 @@ button { cursor: pointer; }
 .spinner { width: 13px; height: 13px; border: 2px solid #333; border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* 大視窗：同一個 .channel 元素放大到中央，外觀由 .is-hero 切換 */
+/* hero: the same .channel element enlarged into the centre, switched by .is-hero */
 .channel.is-hero {
   border-width: 2px; border-color: rgba(255,255,255,.18); border-radius: var(--hero-radius);
   background: #000; z-index: 12;
@@ -114,7 +116,7 @@ button { cursor: pointer; }
   position: fixed; inset: 0; width: 100% !important; height: 100% !important;
   border: 0; border-radius: 0; z-index: 60; transition: none;
 }
-/* 只有大視窗顯示 hero 元件、只有小視窗顯示 mini 元件 */
+/* hero parts only show on the big tile, mini parts only on small tiles */
 .channel:not(.is-hero) .hero-gradient,
 .channel:not(.is-hero) .hero-mode,
 .channel:not(.is-hero) .hero-info,
@@ -139,7 +141,7 @@ button { cursor: pointer; }
 .channel.is-hero:hover .hero-volume, .hero-volume.show { opacity: 1; }
 .hero-volume input { width: 100%; accent-color: var(--yellow); }
 
-/* ---------------- 翻頁 ---------------- */
+/* ---------------- paging ---------------- */
 .page-controls {
   position: absolute; left: 50%; bottom: 16px; z-index: 25; display: flex; align-items: center; gap: 12px;
   padding: 6px 14px; border-radius: 999px; color: #bbb; background: rgba(0,0,0,.75);
@@ -149,7 +151,7 @@ button { cursor: pointer; }
 .page-controls button { border: 0; color: #ddd; background: none; font-size: 14px; }
 .page-controls button:disabled { opacity: .3; cursor: default; }
 
-/* ---------------- 空狀態 ---------------- */
+/* ---------------- empty state ---------------- */
 #empty-state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--black); }
 .empty-card { text-align: center; color: var(--muted); padding: 30px; }
 .empty-preview { width: 300px; height: 175px; margin: 0 auto 22px; padding: 4px; border: 2px solid #242424; border-radius: 16px; background: #090909; }
@@ -159,7 +161,7 @@ button { cursor: pointer; }
 .empty-card h2 { margin: 0 0 8px; color: #fff; font-size: 22px; }
 .empty-card p { max-width: 480px; margin: 0 auto 20px; font-size: 13px; line-height: 1.6; }
 
-/* ---------------- 模態視窗 ---------------- */
+/* ---------------- modal ---------------- */
 .modal {
   position: fixed; inset: 0; z-index: 100;
   background: rgba(0,0,0,.72); display: flex; align-items: center; justify-content: center;

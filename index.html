@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,7 +14,7 @@
     <header id="toolbar">
       <div id="brand">
         <h1>go2rtc Viewer Wall</h1>
-        <button id="g2r-url" class="url-pill" title="點擊變更 go2rtc 網址"></button>
+        <button id="g2r-url" class="url-pill" title="Click to change the go2rtc URL"></button>
       </div>
       <div id="controls">
         <div id="mode-group" class="mode-group">
@@ -23,8 +23,8 @@
           <button data-mode="6x6">6×6</button>
           <button data-mode="7x7">7×7</button>
         </div>
-        <button id="btn-picker" class="primary">📷 選擇攝像頭</button>
-        <button id="btn-fullscreen" title="全螢幕 (F)">⛶ 全螢幕</button>
+        <button id="btn-picker" class="primary">📷 Select cameras</button>
+        <button id="btn-fullscreen" title="Fullscreen (F)">⛶ Fullscreen</button>
         <span id="summary" class="summary"></span>
       </div>
     </header>
@@ -49,60 +49,60 @@
             <div class="empty-preview-cell center"></div>
           </div>
         </div>
-        <h2>還沒選擇任何攝像頭</h2>
-        <p>點「選擇攝像頭」，從 go2rtc 挑選要顯示的串流；中間為大視窗，外圈為小視窗。</p>
-        <button id="btn-empty-picker" class="primary">📷 選擇攝像頭</button>
+        <h2>No cameras selected yet</h2>
+        <p>Click "Select cameras" to pick streams from go2rtc. The centre is the hero window, the ring around it holds the mini windows.</p>
+        <button id="btn-empty-picker" class="primary">📷 Select cameras</button>
       </div>
     </div>
   </div>
 
-  <!-- 攝像頭選擇視窗 -->
+  <!-- camera picker -->
   <div id="modal-picker" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-card">
       <header class="modal-head">
-        <h2>選擇攝像頭</h2>
+        <h2>Select cameras</h2>
         <button class="modal-close" data-close>✕</button>
       </header>
       <div class="modal-body">
         <div class="picker-toolbar">
-          <input id="picker-search" type="search" placeholder="搜尋串流名稱…" autocomplete="off">
+          <input id="picker-search" type="search" placeholder="Search stream name…" autocomplete="off">
           <span id="picker-count" class="summary"></span>
         </div>
         <div id="picker-left">
-          <div class="picker-sub">全部串流 <span id="picker-all-info"></span></div>
+          <div class="picker-sub">All streams <span id="picker-all-info"></span></div>
           <div id="stream-list" class="stream-list"></div>
         </div>
         <div id="picker-right">
-          <div class="picker-sub">已選（點 ↑↓ 調整順序）</div>
+          <div class="picker-sub">Selected (use ↑↓ to reorder)</div>
           <div id="selected-list" class="stream-list selected"></div>
         </div>
       </div>
       <footer class="modal-foot">
-        <button id="picker-clear">清空</button>
-        <button id="picker-online">選取在線</button>
-        <button id="picker-save" class="primary">套用到牆面</button>
+        <button id="picker-clear">Clear</button>
+        <button id="picker-online">Select online</button>
+        <button id="picker-save" class="primary">Apply to wall</button>
       </footer>
     </div>
   </div>
 
-  <!-- 設定視窗 -->
+  <!-- settings dialog -->
   <div id="modal-settings" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-card narrow">
       <header class="modal-head">
-        <h2>設定</h2>
+        <h2>Settings</h2>
         <button class="modal-close" data-close>✕</button>
       </header>
       <div class="modal-body">
         <label class="field">
-          <span>go2rtc 網址</span>
+          <span>go2rtc URL</span>
           <input id="settings-url" type="url" spellcheck="false" placeholder="http://192.168.1.10:1984">
         </label>
-        <p class="hint">使用者可自行輸入任何 go2rtc 位址；儲存後伺服器會以其為串流來源。</p>
+        <p class="hint">Enter any go2rtc address. Once saved, the server uses it as the stream source.</p>
         <div id="settings-status" class="settings-status"></div>
       </div>
       <footer class="modal-foot">
-        <button id="settings-test">測試連線</button>
-        <button id="settings-save" class="primary">儲存</button>
+        <button id="settings-test">Test connection</button>
+        <button id="settings-save" class="primary">Save</button>
       </footer>
     </div>
   </div>

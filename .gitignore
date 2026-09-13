@@ -1,6 +1,6 @@
 __pycache__/
 *.pyc
 
-# 執行期間自動產生的狀態檔（各自的機器不同，不進版控）
+# Runtime-generated state files (machine specific, not tracked)
 settings.json
 wall.json

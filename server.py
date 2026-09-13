@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-go2rtc Viewer Wall — 輕量 HTTP 伺服器（僅用 Python 標準庫）
+go2rtc Viewer Wall - a small HTTP server (Python standard library only)
 
-為什麼需要代理：
-  * go2rtc 的 /api/streams 不回 CORS header，跨來源 fetch 會被瀏覽器擋下
-  * go2rtc 的 WebSocket（/api/ws）會拒絕帶 Origin 的握手（403），
-    瀏覽器一定帶 Origin，所以必須由本伺服器代為建立上游 WS 再中繼
+Why a proxy is needed:
+  * go2rtc /api/streams sends no CORS header, so a cross-origin fetch is blocked by the browser
+  * go2rtc's WebSocket (/api/ws) rejects handshakes that carry an Origin header (403), and
+    browsers always send one, so this server has to open the upstream WS and relay it
 
-功能：
-  * 提供靜態網頁（index.html / css / js）
-  * GET  /api/settings       回傳目前 go2rtc 網址
-  * PUT  /api/settings       更新 go2rtc 網址（可加 ?dry=1 只測不存）
-  * GET  /api/wall           回傳牆面共用設定（選了哪些攝像頭／版面／大視窗／音量）
-  * PUT  /api/wall           更新牆面共用設定（所有瀏覽器共用同一份）
-  * GET  /api/streams        代理 go2rtc 串流列表（含 1.5s 快取）
-  * GET  /api/ws             瀏覽器 WebSocket 中繼到 go2rtc
-  * GET  /api/<其他>          HTTP 代理（hls / frame.jpg / mjpeg 等）
+Features:
+  * serves the static page (index.html / css / js)
+  * GET  /api/settings       returns the configured go2rtc URL
+  * PUT  /api/settings       updates the go2rtc URL (?dry=1 tests without saving)
+  * GET  /api/wall           returns the shared wall settings (cameras / layout / hero / volume)
+  * PUT  /api/wall           updates the shared wall settings (one copy for every browser)
+  * GET  /api/streams        proxies the go2rtc stream list (1.5s cache)
+  * GET  /api/ws             relays the browser WebSocket to go2rtc
+  * GET  /api/<anything>     HTTP proxy (hls / frame.jpeg / mjpeg ...)
 
-執行：python3 server.py [port]   （預設 8082）
+Run: python3 server.py [port]   (default 8082)
 """
 
 import base64
@@ -42,14 +42,14 @@ WALL_FILE = os.path.join(ROOT, "wall.json")
 DEFAULT_GO2RTC = "http://192.168.1.10:1984"
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("WALL_PORT", "8082"))
 BIND = os.environ.get("WALL_BIND", "0.0.0.0")
-STREAMS_TTL = 1.5   # 秒，串流列表快取
-CONFIG_TTL = 60.0   # 秒，go2rtc 設定快取
+STREAMS_TTL = 1.5   # seconds, stream list cache
+CONFIG_TTL = 60.0   # seconds, go2rtc config cache
 
 _lock = threading.Lock()
 _streams_cache = {"ts": 0.0, "data": None, "error": None}
 _config_cache = {"ts": 0.0, "aliases": {}}
 
-# 牆面共用設定：只存這些欄位，所有瀏覽器讀寫同一份 wall.json
+# shared wall settings: only these fields, every browser reads and writes the same wall.json
 WALL_FIELDS = ("selected", "mode", "page", "featured", "vol")
 WALL_DEFAULTS = {"selected": [], "mode": "5x5", "page": 0, "featured": None, "vol": 0.7}
 WALL_MODES = ("4x4", "5x5", "6x6", "7x7")
@@ -70,9 +70,9 @@ def save_settings(url):
         json.dump({"go2rtc": url}, f, ensure_ascii=False, indent=2)
 
 
-# ---- 牆面共用設定（wall.json） -------------------------------------------
+# ---- shared wall settings (wall.json) --------------------------------------
 def _clean_wall(raw):
-    """把任意輸入收斂成合法欄位，避免壞資料讓前端炸掉。"""
+    """Coerce any input into valid fields so bad data cannot break the front end."""
     src = raw if isinstance(raw, dict) else {}
     wall = {}
 
@@ -115,7 +115,7 @@ def load_wall():
 
 
 def save_wall(patch):
-    """以現有內容為底，覆蓋 patch 內的欄位後整份寫回（原子寫入）。"""
+    """Merge patch over the current content, then write the whole file back (atomically)."""
     with _wall_lock:
         merged = load_wall()
         if isinstance(patch, dict):
@@ -132,7 +132,7 @@ def save_wall(patch):
 
 
 def go2rtc_fetch(path, timeout=5, base=None):
-    """向指定的 go2rtc（預設備案設定值）抓取資料，回傳 bytes / status / content-type。"""
+    """Fetch from the given go2rtc (or the configured one), return bytes / status / content-type."""
     url = (base or load_settings()).rstrip("/") + path
     req = urllib.request.Request(url, headers={"User-Agent": "go2rtc-viewer-wall/1.0"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -147,15 +147,16 @@ class WallHandler(SimpleHTTPRequestHandler):
         self._cc_sent = False
         super().__init__(*args, directory=ROOT, **kwargs)
 
-    # 靜態檔（index.html / js / css）加上 no-cache：瀏覽器每次都會回伺服器驗證，
-    # 檔案沒變回 304、有變就拿到新內容，避免使用者重新整理後仍執行到舊版 JS。
+    # no-cache on static files (index.html / js / css): the browser revalidates every time,
+    # gets a 304 when unchanged and fresh content when it changed, so a plain reload never
+    # keeps running an old build of the JS.
     def end_headers(self):
         if not self._cc_sent and not self.path.split("?", 1)[0].startswith("/api/"):
             self.send_header("Cache-Control", "no-cache, must-revalidate")
         self._cc_sent = False
         super().end_headers()
 
-    # ---- 小工具 -----------------------------------------------------------
+    # ---- helpers ---------------------------------------------------------
     def send_json(self, obj, status=200):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -172,7 +173,7 @@ class WallHandler(SimpleHTTPRequestHandler):
             return b""
         return self.rfile.read(length)
 
-    def log_message(self, fmt, *args):  # 靜音預設記錄
+    def log_message(self, fmt, *args):  # silence the default request log
         pass
 
     # ---- GET ---------------------------------------------------------------
@@ -206,10 +207,10 @@ class WallHandler(SimpleHTTPRequestHandler):
                     body, _status, _ct = go2rtc_fetch("/api/streams")
                     data = json.loads(body.decode("utf-8"))
                 except urllib.error.HTTPError as e:
-                    error = "go2rtc 回應錯誤 HTTP %s" % e.code
+                    error = "go2rtc returned HTTP %s" % e.code
                 except Exception as e:
                     reason = getattr(e, "reason", e)
-                    error = "無法連線 go2rtc：%s" % reason
+                    error = "cannot reach go2rtc: %s" % reason
                 cached.update({"ts": now, "data": data, "error": error})
         if data is not None:
             aliases = self.build_aliases(data)
@@ -217,11 +218,11 @@ class WallHandler(SimpleHTTPRequestHandler):
         else:
             self.send_json({"go2rtc": load_settings(), "error": error, "streams": {}}, status=502)
 
-    # ---- H.264 對應版解析（從 go2rtc 設定中的 ffmpeg 轉碼串流推導） -----------
+    # ---- H.264 counterpart resolution (derived from ffmpeg streams in the go2rtc config) ----
     def build_aliases(self, streams):
-        """回傳 { 串流名稱: "h264對應串流名稱或自身" }。
-        例如 rsliving → rsliving_h264、no15 → no15_homekit、backyard → backyard。
-        判定標準：設定中 ffmpeg:<base>#video=h264 的串流，base 就是它的來源。"""
+        """Return { stream name: "h264 counterpart name, or itself" }.
+        For example cam1 -> cam1_h264, cam2 -> cam2_homekit, cam3 -> cam3.
+        Rule: a stream configured as ffmpeg:<base>#video=h264 has <base> as its source."""
         base_map = {}   # baseName -> [transcodedKeys]
         with _lock:
             cc = _config_cache
@@ -246,7 +247,7 @@ class WallHandler(SimpleHTTPRequestHandler):
         names = set(streams.keys())
         for name in names:
             cands = base_map.get(name, [])
-            # 偏好 <name>_h264，其次 <name>_homekit，再來其他（皆有行最前面的優先）
+            # prefer <name>_h264, then <name>_homekit, then anything else
             pick = None
             for pref in (name + "_h264", name + "_homekit"):
                 if pref in cands and pref in names:
@@ -262,7 +263,7 @@ class WallHandler(SimpleHTTPRequestHandler):
 
     @staticmethod
     def _parse_stream_entries(raw):
-        """粗略解析 yaml 的 streams 區塊：回傳 { key: value 或 [values] }。"""
+        """Roughly parse the streams block of the yaml: returns { key: value or [values] }."""
         entries = {}
         in_streams = False
         last_key = None
@@ -272,7 +273,7 @@ class WallHandler(SimpleHTTPRequestHandler):
                 continue
             if not line.strip():
                 continue
-            if line[0] not in (" ", "\t"):  # 非縮排的頂層 key
+            if line[0] not in (" ", "\t"):  # an unindented top-level key
                 in_streams = False
                 continue
             if not in_streams:
@@ -280,7 +281,7 @@ class WallHandler(SimpleHTTPRequestHandler):
             stripped = line.strip()
             if stripped.startswith("#"):
                 continue
-            if line.startswith("    - "):  # 串流對應多來源
+            if line.startswith("    - "):  # a stream with several sources
                 if last_key is not None:
                     entries.setdefault(last_key, []).append(line[6:].strip())
                 continue
@@ -295,12 +296,12 @@ class WallHandler(SimpleHTTPRequestHandler):
                     last_key = key
         return entries
 
-    # ---- WebSocket 中繼 ----------------------------------------------------
+    # ---- WebSocket relay --------------------------------------------------
     def handle_ws_relay(self):
         client = self.connection
         client.settimeout(90)
         try:
-            # 握手 header 已由 BaseHTTPRequestHandler 解析完畢
+            # the handshake headers have already been parsed by BaseHTTPRequestHandler
             client_key = self.headers.get("Sec-WebSocket-Key", "")
             if not client_key:
                 self.send_json({"error": "missing websocket key"}, 400)
@@ -327,7 +328,7 @@ class WallHandler(SimpleHTTPRequestHandler):
             up_head, _up_rest = self._read_http_head(upstream)
             if not up_head.startswith(b"HTTP/1.1 101"):
                 upstream.close()
-                self.send_json({"error": "上游 go2rtc 握手失敗"}, 502)
+                self.send_json({"error": "upstream go2rtc handshake failed"}, 502)
                 return
 
             accept = base64.b64encode(
@@ -389,7 +390,7 @@ class WallHandler(SimpleHTTPRequestHandler):
                 except OSError:
                     return
 
-    # ---- HTTP 代理（/api/* 其餘路徑） ---------------------------------------
+    # ---- HTTP proxy (every other /api/* path) -----------------------------
     def handle_proxy(self):
         url = load_settings().rstrip("/") + self.path
         try:
@@ -438,7 +439,7 @@ class WallHandler(SimpleHTTPRequestHandler):
             return
         url = str(payload.get("go2rtc") or "").strip()
         if not url:
-            self.send_json({"error": "go2rtc url 不可為空"}, 400)
+            self.send_json({"error": "go2rtc url must not be empty"}, 400)
             return
         if not url.startswith(("http://", "https://")):
             url = "http://" + url
@@ -448,7 +449,7 @@ class WallHandler(SimpleHTTPRequestHandler):
             count = len(json.loads(body.decode("utf-8")))
         except Exception as e:
             reason = getattr(e, "reason", e)
-            self.send_json({"error": "無法連線 %s：%s" % (url, reason)}, 502)
+            self.send_json({"error": "cannot reach %s: %s" % (url, reason)}, 502)
             return
         if not dry:
             save_settings(url)
