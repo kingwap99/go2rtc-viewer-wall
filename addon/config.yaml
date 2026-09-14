@@ -1,5 +1,5 @@
 name: "go2rtc Viewer Wall"
-version: "1.0.1"
+version: "1.0.2"
 slug: "go2rtc_viewer_wall"
 description: >-
   Show all your go2rtc cameras on one wall: a centre hero window plus a ring of

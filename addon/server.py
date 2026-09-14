@@ -196,7 +196,8 @@ class WallHandler(SimpleHTTPRequestHandler):
             return
         path = self.strip_ingress(self.path.split("?", 1)[0])
         if path == "/api/ws" and self.headers.get("Upgrade", "").lower() == "websocket":
-            self.handle_ws_relay()
+            qs = self.path.split("?", 1)[1] if "?" in self.path else ""
+            self.handle_ws_relay("/api/ws" + ("?" + qs if qs else ""))
             return
         if path == "/api/settings":
             self.send_json({"go2rtc": load_settings(), "default": DEFAULT_GO2RTC})
@@ -335,7 +336,7 @@ class WallHandler(SimpleHTTPRequestHandler):
         return entries
 
     # ---- WebSocket relay --------------------------------------------------
-    def handle_ws_relay(self):
+    def handle_ws_relay(self, target):
         client = self.connection
         client.settimeout(90)
         try:
@@ -360,7 +361,7 @@ class WallHandler(SimpleHTTPRequestHandler):
                 "Connection: Upgrade\r\n"
                 "Sec-WebSocket-Key: %s\r\n"
                 "Sec-WebSocket-Version: 13\r\n"
-                "\r\n" % ("/api/ws", host, port, upstream_key)
+                "\r\n" % (target, host, port, upstream_key)
             )
             upstream.sendall(request.encode("ascii"))
             up_head, _up_rest = self._read_http_head(upstream)
