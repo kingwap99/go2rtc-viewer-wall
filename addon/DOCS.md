@@ -29,5 +29,19 @@ add-ons (camera devices are often only reachable from the host network).
 
 ## Persistence
 
-Wall layout and settings are stored in the add-on's `/data` folder, so they
-survive add-on updates and container rebuilds.
+The wall's shared settings live in
+`/config/go2rtc_viewer_wall.yaml` - the same folder as
+`go2rtc.yaml` - so you can hand-edit them like the go2rtc config:
+
+    # go2rtc viewer wall
+    selected:
+      - front_door
+      - backyard
+    mode: 4x4
+    featured: front_door
+    vol: 0.7
+
+Edits are picked up while the add-on is running (the page polls every
+4 seconds). The file is rewritten whenever you change the wall in the browser,
+and because it sits in the HA config folder it is included in Home Assistant
+backups. The go2rtc URL itself stays configured in the add-on options.

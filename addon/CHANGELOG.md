@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3
+
+- Wall settings now live in /config/go2rtc_viewer_wall.yaml, hand-editable YAML
+  in the same folder as go2rtc.yaml. Standalone installs keep wall.json.
+
 ## 1.0.2
 
 - Fixed black / "no signal" tiles after the ingress update: the WebSocket relay

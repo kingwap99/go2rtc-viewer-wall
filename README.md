@@ -85,8 +85,9 @@ This repository is also a Home Assistant add-on repository:
 
 The add-on runs with host networking so it can reach go2rtc (and your cameras)
 on the host network. Camera selection, layout, hero and volume are stored in
-the add-on's `/data` folder and survive restarts and updates. The wall is also
-embedded in Home Assistant's sidebar via ingress.
+the add-on's `/config/go2rtc_viewer_wall.yaml` - the same folder as
+`go2rtc.yaml` - as hand-editable YAML (survives restarts, included in HA
+backups). The wall is also embedded in Home Assistant's sidebar via ingress.
 
 ## Files
 

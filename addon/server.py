@@ -42,6 +42,10 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("WALL_DATA_DIR") or ROOT
 SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 WALL_FILE = os.path.join(DATA_DIR, "wall.json")
+# The Home Assistant add-on stores the shared wall settings as a YAML file next to
+# go2rtc.yaml (WALL_CONFIG_FILE), so it can be hand-edited like the go2rtc config.
+WALL_CONFIG_FILE = os.environ.get("WALL_CONFIG_FILE") or WALL_FILE
+IS_YAML_WALL = WALL_CONFIG_FILE.endswith((".yaml", ".yml"))
 # GO2RTC_URL lets the add-on feed the configured go2rtc address from its options.
 DEFAULT_GO2RTC = os.environ.get("GO2RTC_URL") or "http://192.168.1.10:1984"
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("WALL_PORT", "8082"))
@@ -85,6 +89,71 @@ def save_settings(url):
 
 
 # ---- shared wall settings (wall.json) --------------------------------------
+def _yaml_scalar(v):
+    """Parse one YAML scalar (quotes, booleans, null, int, float)."""
+    v = v.strip()
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
+        return v[1:-1]
+    low = v.lower()
+    if low in ("true", "yes", "on"):
+        return True
+    if low in ("false", "no", "off"):
+        return False
+    if low in ("null", "~", "none"):
+        return None
+    try:
+        return int(v)
+    except ValueError:
+        pass
+    try:
+        return float(v)
+    except ValueError:
+        return v
+
+
+def _yaml_read(text):
+    """Minimal YAML-subset reader for the wall config: flat keys + block lists."""
+    data = {}
+    key = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("- "):
+            if key is not None:
+                data.setdefault(key, []).append(_yaml_scalar(stripped[2:]))
+            continue
+        if ":" in stripped:
+            k, _, v = stripped.partition(":")
+            key = k.strip()
+            v = v.strip()
+            if v:
+                data[key] = _yaml_scalar(v)
+            else:
+                data.setdefault(key, [])
+    return data
+
+
+def _yaml_dump(wall):
+    """Render the wall config as YAML, shaped like a go2rtc stream config file."""
+    out = [
+        "# go2rtc viewer wall - shared wall settings",
+        "# Hand-edit this file while the add-on is running; the page picks changes",
+        "# up within a few seconds (the front end polls every 4 seconds).",
+        "",
+        "selected:",
+    ]
+    if wall["selected"]:
+        out += ["  - %s" % name for name in wall["selected"]]
+    out.append("mode: %s" % wall["mode"])
+    out.append("page: %d" % wall["page"])
+    if wall["featured"] is not None:
+        out.append("featured: %s" % wall["featured"])
+    out.append("vol: %s" % ("%g" % wall["vol"]))
+    out.append("updated: %s" % ("%g" % wall["updated"]))
+    return "\n".join(out) + "\n"
+
+
 def _clean_wall(raw):
     """Coerce any input into valid fields so bad data cannot break the front end."""
     src = raw if isinstance(raw, dict) else {}
@@ -121,8 +190,9 @@ def _clean_wall(raw):
 
 def load_wall():
     try:
-        with open(WALL_FILE, "r", encoding="utf-8") as f:
-            raw = json.load(f)
+        with open(WALL_CONFIG_FILE, "r", encoding="utf-8") as f:
+            text = f.read()
+        raw = _yaml_read(text) if IS_YAML_WALL else json.loads(text)
     except Exception:
         raw = {}
     return _clean_wall(raw)
@@ -138,10 +208,10 @@ def save_wall(patch):
                     merged[key] = patch[key]
         merged = _clean_wall(merged)
         merged["updated"] = time.time()
-        tmp = WALL_FILE + ".tmp"
+        tmp = WALL_CONFIG_FILE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(merged, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, WALL_FILE)
+            f.write(_yaml_dump(merged) if IS_YAML_WALL else json.dumps(merged, ensure_ascii=False, indent=2))
+        os.replace(tmp, WALL_CONFIG_FILE)
         return merged
 
 
