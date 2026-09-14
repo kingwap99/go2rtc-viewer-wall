@@ -46,6 +46,12 @@ WALL_FILE = os.path.join(DATA_DIR, "wall.json")
 # go2rtc.yaml (WALL_CONFIG_FILE), so it can be hand-edited like the go2rtc config.
 WALL_CONFIG_FILE = os.environ.get("WALL_CONFIG_FILE") or WALL_FILE
 IS_YAML_WALL = WALL_CONFIG_FILE.endswith((".yaml", ".yml"))
+# If the configured folder is not mounted (e.g. the HA /config map is missing on
+# this Supervisor version), fall back to the JSON file next to server.py so the
+# wall keeps working instead of crashing on write.
+if IS_YAML_WALL and not os.path.isdir(os.path.dirname(WALL_CONFIG_FILE)):
+    WALL_CONFIG_FILE = WALL_FILE
+    IS_YAML_WALL = False
 # GO2RTC_URL lets the add-on feed the configured go2rtc address from its options.
 DEFAULT_GO2RTC = os.environ.get("GO2RTC_URL") or "http://192.168.1.10:1984"
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("WALL_PORT", "8082"))

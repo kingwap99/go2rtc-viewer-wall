@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4
+
+- Fixed a write crash when the HA config folder was not mounted: use the same
+  `config:rw` map as the go2rtc app, probe /config and /CONFIG, and fall back
+  to the add-on /data folder when the mount is unavailable.
+
 ## 1.0.3
 
 - Wall settings now live in /config/go2rtc_viewer_wall.yaml, hand-editable YAML

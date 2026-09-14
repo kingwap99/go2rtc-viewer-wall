@@ -1,5 +1,5 @@
 name: "go2rtc Viewer Wall"
-version: "1.0.3"
+version: "1.0.4"
 slug: "go2rtc_viewer_wall"
 description: >-
   Show all your go2rtc cameras on one wall: a centre hero window plus a ring of
@@ -19,7 +19,7 @@ ingress: true
 ingress_port: 8082
 panel_icon: "mdi:cctv"
 map:
-  - homeassistant_config:rw
+  - config:rw
 options:
   go2rtc_url: "http://localhost:1984"
 schema:

@@ -44,4 +44,8 @@ The wall's shared settings live in
 Edits are picked up while the add-on is running (the page polls every
 4 seconds). The file is rewritten whenever you change the wall in the browser,
 and because it sits in the HA config folder it is included in Home Assistant
-backups. The go2rtc URL itself stays configured in the add-on options.
+backups (the folder shows up as "CONFIG" on SMB/Windows shares; the path inside
+the add-on is lowercase /config). If the mount is not available on your
+Supervisor, the wall automatically falls back to
+`/data/go2rtc_viewer_wall.yaml` instead of failing. The go2rtc URL itself
+stays configured in the add-on options.
