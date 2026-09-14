@@ -80,12 +80,13 @@ This repository is also a Home Assistant add-on repository:
 3. Install **go2rtc Viewer Wall** and open its Configuration tab:
    - `go2rtc_url` defaults to `http://localhost:1984`, which matches the
      official go2rtc add-on when it uses host networking
-   - `port` defaults to `8082`
-4. Start the add-on and open `http://<your-home-assistant-host>:8082/`
+4. Start the add-on and open it from the Home Assistant sidebar
+   (**go2rtc Viewer Wall**), or directly at `http://<your-home-assistant-host>:8082/`
 
 The add-on runs with host networking so it can reach go2rtc (and your cameras)
 on the host network. Camera selection, layout, hero and volume are stored in
-the add-on's `/data` folder and survive restarts and updates.
+the add-on's `/data` folder and survive restarts and updates. The wall is also
+embedded in Home Assistant's sidebar via ingress.
 
 ## Files
 

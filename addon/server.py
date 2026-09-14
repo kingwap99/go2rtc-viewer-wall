@@ -46,6 +46,16 @@ WALL_FILE = os.path.join(DATA_DIR, "wall.json")
 DEFAULT_GO2RTC = os.environ.get("GO2RTC_URL") or "http://192.168.1.10:1984"
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("WALL_PORT", "8082"))
 BIND = os.environ.get("WALL_BIND", "0.0.0.0")
+# Home Assistant ingress: Supervisor forwards /api/hassio_ingress/<token>/... to
+# this server and the app must serve the same pages under that prefix.
+def _ingress_prefix():
+    for name in ("SUPERVISOR_INGRESS_URL", "HASSIO_INGRESS_URL"):
+        url = os.environ.get(name) or ""
+        if url:
+            return urllib.parse.urlsplit(url).path.rstrip("/") or None
+    return None
+
+INGRESS = _ingress_prefix()
 STREAMS_TTL = 1.5   # seconds, stream list cache
 CONFIG_TTL = 60.0   # seconds, go2rtc config cache
 
@@ -182,7 +192,9 @@ class WallHandler(SimpleHTTPRequestHandler):
 
     # ---- GET ---------------------------------------------------------------
     def do_GET(self):
-        path = self.path.split("?", 1)[0]
+        if self.ingress_root():
+            return
+        path = self.strip_ingress(self.path.split("?", 1)[0])
         if path == "/api/ws" and self.headers.get("Upgrade", "").lower() == "websocket":
             self.handle_ws_relay()
             return
@@ -195,9 +207,31 @@ class WallHandler(SimpleHTTPRequestHandler):
         elif path == "/api/health":
             self.send_json({"ok": True, "go2rtc": load_settings()})
         elif path.startswith("/api/"):
-            self.handle_proxy()
+            self.handle_proxy(path)
         else:
+            self.path = path
             super().do_GET()
+
+    def ingress_root(self):
+        """Redirect the bare ingress entry (no trailing slash) so relative links resolve."""
+        if not INGRESS:
+            return False
+        if self.path.split("?", 1)[0] == INGRESS:
+            self.send_response(302)
+            self.send_header("Location", INGRESS + "/")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return True
+        return False
+
+    def strip_ingress(self, path):
+        """Translate an ingress-prefixed request path back to the internal path."""
+        if INGRESS:
+            if path == INGRESS:
+                return "/"
+            if path.startswith(INGRESS + "/"):
+                return path[len(INGRESS):]
+        return path
 
     def handle_streams(self):
         now = time.time()
@@ -326,7 +360,7 @@ class WallHandler(SimpleHTTPRequestHandler):
                 "Connection: Upgrade\r\n"
                 "Sec-WebSocket-Key: %s\r\n"
                 "Sec-WebSocket-Version: 13\r\n"
-                "\r\n" % (self.path, host, port, upstream_key)
+                "\r\n" % ("/api/ws", host, port, upstream_key)
             )
             upstream.sendall(request.encode("ascii"))
             up_head, _up_rest = self._read_http_head(upstream)
@@ -395,8 +429,8 @@ class WallHandler(SimpleHTTPRequestHandler):
                     return
 
     # ---- HTTP proxy (every other /api/* path) -----------------------------
-    def handle_proxy(self):
-        url = load_settings().rstrip("/") + self.path
+    def handle_proxy(self, path):
+        url = load_settings().rstrip("/") + path
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "go2rtc-viewer-wall/1.0"})
             with urllib.request.urlopen(req, timeout=30) as resp:
@@ -421,6 +455,7 @@ class WallHandler(SimpleHTTPRequestHandler):
     # ---- PUT ---------------------------------------------------------------
     def do_PUT(self):
         path, _, query = self.path.partition("?")
+        path = self.strip_ingress(path)
         dry = "dry=1" in query
         if path == "/api/wall":
             try:

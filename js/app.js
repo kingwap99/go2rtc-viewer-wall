@@ -71,7 +71,7 @@ async function flushWall() {
   for (const key of Object.keys(wallPending)) delete wallPending[key];
   if (Object.keys(body).length === 0) return;
   try {
-    const res = await fetch('/api/wall', {
+    const res = await fetch('api/wall', {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body),
@@ -108,7 +108,7 @@ function applyWallState(w, doRender = true) {
 /* Read the shared settings from the server; updated=0 means never saved (use the fallback) */
 async function loadWall() {
   try {
-    const data = await api('/api/wall');
+    const data = await api('api/wall');
     if (data && typeof data.updated === 'number') {
       wallServer = {...wallServer, ...data};
       return data.updated > 0 ? data : null;
@@ -121,7 +121,7 @@ async function loadWall() {
 async function pollWall() {
   if (wallPushTimer || Object.keys(wallPending).length > 0) return;
   try {
-    const data = await api('/api/wall');
+    const data = await api('api/wall');
     if (!data || typeof data.updated !== 'number') return;
     if (data.updated > wallServer.updated + 0.0005) {
       wallServer = {...wallServer, ...data};
@@ -258,7 +258,7 @@ async function api(path, options = {}) {
 /* ---------------- state loading ---------------- */
 async function loadSettings() {
   try {
-    const data = await api('/api/settings');
+    const data = await api('api/settings');
     state.go2rtc = data.go2rtc || data.default || '';
     $('#g2r-url').textContent = 'go2rtc: ' + state.go2rtc;
   } catch (e) {
@@ -268,7 +268,7 @@ async function loadSettings() {
 
 async function refreshStreams(silent = true) {
   try {
-    const data = await api('/api/streams');
+    const data = await api('api/streams');
     if (data.error) {
       state.streamsError = data.error;
       state.streams = {};
@@ -322,7 +322,7 @@ function getPool(name) {
   // lifecycle is owned by the pool in this file instead (dropPool on paging / removal).
   st.background = true;
   st.ensureVideo();
-  st.src = '/api/ws?src=' + encodeURIComponent(eff);
+  st.src = 'api/ws?src=' + encodeURIComponent(eff);
   const entry = {name, eff, st, forcedMJPEG: false, lastMode: '—', dead: false, mediaErrored: false, reviveAt: 0, reviveCount: 0};
   // Only count decode errors that happen after the MJPEG switch, so a stale MSE error is
   // not mistaken for "no signal"
@@ -879,7 +879,7 @@ async function putSettings(url, dry) {
   $('#settings-status').textContent = 'testing connection…';
   $('#settings-status').className = 'settings-status';
   try {
-    const res = await fetch('/api/settings' + (dry ? '?dry=1' : ''), {
+    const res = await fetch('api/settings' + (dry ? '?dry=1' : ''), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({go2rtc: url}),
