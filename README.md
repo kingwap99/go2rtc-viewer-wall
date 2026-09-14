@@ -71,6 +71,22 @@ the WebSocket to go2rtc, keeping the whole page same-origin on :8082. You can st
 
     bash install.sh     # start now + register as a launchd system daemon (needs sudo)
 
+## Home Assistant add-on
+
+This repository is also a Home Assistant add-on repository:
+
+1. Home Assistant -> Settings -> Add-ons -> Add-on store -> menu (top right) -> Repositories
+2. Add `https://github.com/kingwap99/go2rtc-viewer-wall`
+3. Install **go2rtc Viewer Wall** and open its Configuration tab:
+   - `go2rtc_url` defaults to `http://localhost:1984`, which matches the
+     official go2rtc add-on when it uses host networking
+   - `port` defaults to `8082`
+4. Start the add-on and open `http://<your-home-assistant-host>:8082/`
+
+The add-on runs with host networking so it can reach go2rtc (and your cameras)
+on the host network. Camera selection, layout, hero and volume are stored in
+the add-on's `/data` folder and survive restarts and updates.
+
 ## Files
 
     server.py       HTTP + WebSocket proxy (Python standard library)
@@ -79,6 +95,8 @@ the WebSocket to go2rtc, keeping the whole page same-origin on :8082. You can st
     js/app.js       wall logic (mirrors the opencast-grid interactions)
     js/video-rtc.js go2rtc playback core (v1.9.14, unmodified)
     assets/icon.svg icon
+    addon/          Home Assistant add-on (config.yaml, Dockerfile, run.sh, DOCS.md)
+    repository.yaml Home Assistant add-on repository metadata
     README.md       this document
     settings.json   the configured go2rtc URL (generated automatically)
     wall.json       shared wall settings (cameras / layout / hero / volume, generated automatically)

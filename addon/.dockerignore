@@ -1,0 +1,6 @@
+__pycache__
+*.pyc
+settings.json
+wall.json
+DOCS.md
+CHANGELOG.md

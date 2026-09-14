@@ -1,0 +1,23 @@
+name: "go2rtc Viewer Wall"
+version: "1.0.0"
+slug: "go2rtc_viewer_wall"
+description: >-
+  Show all your go2rtc cameras on one wall: a centre hero window plus a ring of
+  mini windows (4x4 .. 7x7). Click any mini to swap it into the centre, click
+  the hero for fullscreen. Camera selection, layout, hero and volume are shared
+  by every browser that opens the page.
+url: "https://github.com/kingwap99/go2rtc-viewer-wall"
+arch:
+  - aarch64
+  - amd64
+  - armv7
+init: false
+host_network: true
+startup: application
+boot: auto
+options:
+  go2rtc_url: "http://localhost:1984"
+  port: 8082
+schema:
+  go2rtc_url: str
+  port: int
