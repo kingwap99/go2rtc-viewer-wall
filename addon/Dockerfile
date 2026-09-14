@@ -1,4 +1,6 @@
-ARG BUILD_FROM
+# Supervisor's app builder may not pass BUILD_FROM for base image selection,
+# so keep a working multi-arch default (python image, stdlib-only server).
+ARG BUILD_FROM=python:3.12-alpine
 FROM $BUILD_FROM
 
 WORKDIR /app

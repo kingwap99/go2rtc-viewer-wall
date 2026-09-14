@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 set -e
 
 # Home Assistant add-ons receive their options as /data/options.json.
