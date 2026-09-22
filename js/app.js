@@ -322,8 +322,8 @@ function getPool(name) {
   // lifecycle is owned by the pool in this file instead (dropPool on paging / removal).
   st.background = true;
   st.ensureVideo();
-  st.src = 'api/ws?src=' + encodeURIComponent(eff);
-  const entry = {name, eff, st, forcedMJPEG: false, lastMode: '—', dead: false, mediaErrored: false, reviveAt: 0, reviveCount: 0};
+  st.src = wallURL('api/ws?src=' + encodeURIComponent(eff));
+  const entry = {name, eff, st, forcedMJPEG: false, lastMode: '—', dead: false, mediaErrored: false, reviveAt: 0, reviveCount: 0, still: 0};
   // Only count decode errors that happen after the MJPEG switch, so a stale MSE error is
   // not mistaken for "no signal"
   st.video.addEventListener('error', () => { entry.mediaErrored = true; });
@@ -332,9 +332,51 @@ function getPool(name) {
   return entry;
 }
 
+/* ---------------- plain-HTTP still fallback ----------------
+   go2rtc can hand out a single JPEG per request (/api/frame.jpeg?src=...), which needs no
+   WebSocket, no MSE and no WebRTC. Some hosts block the WebSocket path completely (the Home
+   Assistant macOS app renders the wall inside a WKWebView under HA ingress, where the WS
+   upgrade never completes), so a tile that cannot get a picture falls back to this slow
+   still image instead of staying black forever. It stops as soon as the video has a frame. */
+function wallURL(path) {
+  try { return new URL(path, document.baseURI).href; } catch (e) { return path; }
+}
+
+function stillViews(name) {
+  return [...document.querySelectorAll('.channel')].filter(n => n.dataset.cam === name);
+}
+
+function startStill(entry) {
+  if (entry.still) return;
+  const paint = () => {
+    if (entry.st.video && entry.st.video.videoWidth > 0) { stopStill(entry); return; }
+    const src = wallURL('api/frame.jpeg?src=' + encodeURIComponent(entry.eff) + '&t=' + Date.now());
+    for (const n of stillViews(entry.name)) {
+      n.classList.add('has-still');
+      const img = n.querySelector('.mini-still');
+      if (img) img.src = src;
+    }
+  };
+  paint();
+  entry.still = setInterval(paint, 5000);
+}
+
+function stopStill(entry) {
+  if (entry.still) {
+    clearInterval(entry.still);
+    entry.still = 0;
+  }
+  for (const n of stillViews(entry.name)) {
+    n.classList.remove('has-still');
+    const img = n.querySelector('.mini-still');
+    if (img) img.removeAttribute('src');
+  }
+}
+
 function dropPool(name) {
   const entry = state.pools.get(name);
   if (entry) {
+    stopStill(entry);
     entry.st.remove();
     entry.st.ondisconnect();
     state.pools.delete(name);
@@ -556,7 +598,8 @@ function createChannel(name) {
     if (entry.st.video) entry.st.video.volume = state.heroVolume;
   });
 
-  el.append(entry.st, loading, overlay, miniRemove,
+  const still = element('img', {className: 'mini-still', alt: ''});
+  el.append(entry.st, still, loading, overlay, miniRemove,
     element('div', {className: 'hero-gradient'}), heroMode, info, controls, volume);
 
   el.addEventListener('click', () => {
@@ -611,7 +654,7 @@ function refreshBadges() {
       if (dot) dot.className = 'live-dot ' + (live ? 'on' : 'off');
       const loading = n.querySelector('.mini-loading');
       if (loading) {
-        loading.classList.toggle('hidden', live);
+        loading.classList.toggle('hidden', live || Boolean(entry.still));
         const label = loading.lastChild;
         if (label && label.nodeType === Node.TEXT_NODE) {
           label.textContent = entry.dead && !live ? 'no signal' : 'connecting…';
@@ -633,6 +676,7 @@ function startTimers() {
       const live = st.video && st.video.videoWidth > 0;
       if (live) {
         // a picture means the tile is healthy again, so a later drop can retry the full chain
+        if (entry.still) stopStill(entry);
         entry.dead = false;
         entry.mediaErrored = false;
         entry.reviveAt = 0;
@@ -665,6 +709,7 @@ function startTimers() {
         continue;
       }
       if (waited < 12000) continue;
+      startStill(entry);   // no picture from the socket chain: show go2rtc's single JPEG instead
       if (!entry.forcedMJPEG && (st.wsState === WebSocket.OPEN || st.pcState !== WebSocket.CLOSED)) {
         // RTC/MSE connected but there is no picture -> fall back to MJPEG (common when an
         // HEVC stream has no H.264 counterpart)

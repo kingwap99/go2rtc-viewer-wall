@@ -102,6 +102,14 @@ button { cursor: pointer; }
   gap: 6px; color: var(--muted); font-size: 10px; background: #111; z-index: 1;
 }
 .mini-loading.hidden, .hidden { display: none !important; }
+/* plain-HTTP still image, used when the socket chain cannot produce a picture at all
+   (the Home Assistant macOS app loads the wall in a WKWebView where the WS never opens) */
+.mini-still {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; display: none; background: #000;
+}
+.channel.is-hero .mini-still { object-fit: contain; }
+.channel.has-still .mini-still { display: block; }
 .spinner { width: 13px; height: 13px; border: 2px solid #333; border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
