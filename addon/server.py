@@ -270,9 +270,10 @@ class WallHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.ingress_root():
             return
-        path = self.strip_ingress(self.path.split("?", 1)[0])
+        raw = self.path
+        path = self.strip_ingress(raw.split("?", 1)[0])
+        qs = raw.split("?", 1)[1] if "?" in raw else ""
         if path == "/api/ws" and self.headers.get("Upgrade", "").lower() == "websocket":
-            qs = self.path.split("?", 1)[1] if "?" in self.path else ""
             self.handle_ws_relay("/api/ws" + ("?" + qs if qs else ""))
             return
         if path == "/api/settings":
@@ -284,7 +285,9 @@ class WallHandler(SimpleHTTPRequestHandler):
         elif path == "/api/health":
             self.send_json({"ok": True, "go2rtc": load_settings()})
         elif path.startswith("/api/"):
-            self.handle_proxy(path)
+            # Keep the query string: go2rtc endpoints such as frame.jpeg / stream.m3u8
+            # (and anything else with ?src=) are useless without it.
+            self.handle_proxy(path + ("?" + qs if qs else ""))
         else:
             self.path = path
             super().do_GET()
