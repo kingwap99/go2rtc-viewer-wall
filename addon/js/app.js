@@ -1025,6 +1025,22 @@ function bindEvents() {
 }
 
 /* ---------------- startup ---------------- */
+/* Re-lay out whenever the viewport changes (window resize, rotation, devtools, fullscreen).
+   The grid geometry comes from the surface size in render(), so it has to run again.
+   Debounced: dragging a window edge must not re-render on every frame. */
+let layoutTID = 0;
+function scheduleLayout() {
+  clearTimeout(layoutTID);
+  layoutTID = setTimeout(render, 80);
+}
+
+function watchViewport() {
+  const surface = $('#surface');
+  if (window.ResizeObserver && surface) new ResizeObserver(scheduleLayout).observe(surface);
+  window.addEventListener('resize', scheduleLayout);
+  window.addEventListener('orientationchange', scheduleLayout);
+}
+
 async function init() {
   try { state.selected = JSON.parse(localStorage.getItem(LS.selected) || '[]'); }
   catch (e) { state.selected = []; }
@@ -1042,6 +1058,7 @@ async function init() {
   }
   render();
   bindEvents();
+  watchViewport();
   startTimers();
   if (state.selected.length === 0) openPicker();
 }
