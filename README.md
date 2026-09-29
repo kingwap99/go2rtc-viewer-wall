@@ -51,6 +51,14 @@ interactions mirror [opencast-grid](https://github.com/kingwap99/opencast-grid)
 - On the very first load (no `wall.json` yet) the browser pushes its own localStorage content,
   so existing users do not have to re-pick their cameras
 
+## Download
+
+    git clone https://github.com/kingwap99/go2rtc-viewer-wall.git
+    cd go2rtc-viewer-wall
+
+Nothing to compile and no packages to install: the server is plain Python 3 (standard
+library only) and the page is static HTML, CSS and JS.
+
 ## Run
 
 Python 3 only (standard library, no third-party packages):
@@ -71,6 +79,14 @@ the WebSocket to go2rtc, keeping the whole page same-origin on :8082. You can st
 
     bash install.sh       # start now + register as a launchd system daemon (needs sudo)
     bash install.sh 9000  # optional: listen on another port (default 8082)
+
+Or without cloning first. This downloads the repository to `~/go2rtc-viewer-wall`
+and installs it from there in one step:
+
+    curl -fsSL https://raw.githubusercontent.com/kingwap99/go2rtc-viewer-wall/main/install.sh | bash
+
+Put `-s -- 9000` after `bash` to use another port, and set `G2RW_DIR` / `G2RW_REF`
+to download another folder, branch or tag.
 
 `install.sh` fills in this machine's directory, user and `python3` by rendering the
 checked-in launchd template `com.go2rtc.wall.plist`, so the checkout can live
@@ -105,7 +121,7 @@ backups). The wall is also embedded in Home Assistant's sidebar via ingress.
     js/video-rtc.js       go2rtc playback core (v1.9.14, unmodified)
     assets/icon.svg       icon
     manifest.json         PWA manifest
-    install.sh            macOS service installer (fills in this machine's paths)
+    install.sh            macOS service installer (downloads the repo when run outside a checkout)
     com.go2rtc.wall.plist launchd template rendered by install.sh
     addon/                Home Assistant add-on (config.yaml, Dockerfile, run.sh, DOCS.md)
     repository.yaml       Home Assistant add-on repository metadata

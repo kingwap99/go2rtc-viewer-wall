@@ -2,9 +2,15 @@
 # Install go2rtc Viewer Wall: start now + a system LaunchDaemon (starts at boot, restarts on crash).
 # Requires sudo (it will ask for your password).
 #
-#   bash install.sh            # listen on 8082 (default)
-#   bash install.sh 9000       # listen on another port
+#   bash install.sh            # inside a checkout: install this copy, listening on 8082
+#   bash install.sh 9000       # ... on another port
 #   DRY_RUN=1 bash install.sh  # print the LaunchDaemon it would write, install nothing
+#
+# From anywhere, without cloning first (downloads to ~/go2rtc-viewer-wall):
+#
+#   curl -fsSL https://raw.githubusercontent.com/kingwap99/go2rtc-viewer-wall/main/install.sh | bash
+#
+# G2RW_DIR picks another download folder, G2RW_REF another branch or tag.
 #
 # com.go2rtc.wall.plist is a template: this script substitutes this machine's
 # directory, user and interpreter into it, so a checkout works wherever it lives.
@@ -19,19 +25,60 @@ case "$PORT" in
     ;;
 esac
 
-APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_SLUG="kingwap99/go2rtc-viewer-wall"
+REF="${G2RW_REF:-main}"
+DEST="${G2RW_DIR:-$HOME/go2rtc-viewer-wall}"
 LABEL="com.go2rtc.wall"
+DRY_RUN="${DRY_RUN:-0}"
+
+APP_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo "$PWD")"
 PLIST_TEMPLATE="$APP_DIR/$LABEL.plist"
 PLIST_DST="/Library/LaunchDaemons/$LABEL.plist"
 RUN_USER="${SUDO_USER:-$(id -un)}"
 PYTHON_BIN="$(command -v python3 || true)"
+
+is_checkout() {
+  [ -f "$1/server.py" ] && [ -f "$1/$LABEL.plist" ] && [ -f "$1/index.html" ]
+}
+
+# Running from a checkout installs that copy. Running from anywhere else - the piped
+# one-liner, an unrelated shell - downloads the repository first, so "download and
+# install" is one command.
+if ! is_checkout "$APP_DIR"; then
+  if is_checkout "$DEST"; then
+    echo "using the existing checkout in $DEST"
+  else
+    if [ "$DRY_RUN" = "1" ]; then
+      echo "no checkout here - would download $REPO_SLUG ($REF) to $DEST" >&2
+      exit 0
+    fi
+    if [ -e "$DEST" ]; then
+      echo "$DEST exists but is not a go2rtc Viewer Wall checkout; set G2RW_DIR to use another folder" >&2
+      exit 1
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
+      echo "curl not found - clone the repository yourself and run install.sh inside it" >&2
+      exit 1
+    fi
+    echo "downloading $REPO_SLUG ($REF) to $DEST"
+    mkdir -p "$DEST"
+    if ! curl -fsSL "https://codeload.github.com/$REPO_SLUG/tar.gz/refs/heads/$REF" \
+        | tar -xz -C "$DEST" --strip-components=1; then
+      echo "download failed - remove $DEST and try again" >&2
+      exit 1
+    fi
+    echo "downloaded to $DEST"
+  fi
+  APP_DIR="$DEST"
+  PLIST_TEMPLATE="$APP_DIR/$LABEL.plist"
+fi
 
 if [ ! -f "$PLIST_TEMPLATE" ]; then
   echo "missing $PLIST_TEMPLATE - copy it together with server.py" >&2
   exit 1
 fi
 if [ ! -f "$APP_DIR/server.py" ]; then
-  echo "missing $APP_DIR/server.py - start from a full checkout of the repository" >&2
+  echo "missing $APP_DIR/server.py - this is not a complete checkout" >&2
   exit 1
 fi
 if [ -z "$PYTHON_BIN" ]; then
@@ -76,7 +123,7 @@ sys.stdout.write(text)
 PY
 }
 
-if [ "${DRY_RUN:-0}" = "1" ]; then
+if [ "$DRY_RUN" = "1" ]; then
   render_plist
   echo "(DRY_RUN=1: nothing was installed)" >&2
   exit 0
