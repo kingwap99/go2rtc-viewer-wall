@@ -85,8 +85,10 @@ and installs it from there in one step:
 
     curl -fsSL https://raw.githubusercontent.com/kingwap99/go2rtc-viewer-wall/main/install.sh | bash
 
-Put `-s -- 9000` after `bash` to use another port, and set `G2RW_DIR` / `G2RW_REF`
-to download another folder, branch or tag.
+Put `-s -- 9000` after `bash` to use another port, and set `G2RW_DIR` / `G2RW_REF
+to download another folder, branch or tag. Re-running the one-liner reuses the copy
+already in that folder - add `G2RW_FORCE=1` to re-download it, which is how the files
+installed by the one-liner get updated.
 
 `install.sh` fills in this machine's directory, user and `python3` by rendering the
 checked-in launchd template `com.go2rtc.wall.plist`, so the checkout can live
