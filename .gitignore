@@ -4,3 +4,4 @@ __pycache__/
 # Runtime-generated state files (machine specific, not tracked)
 settings.json
 wall.json
+server.log

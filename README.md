@@ -18,11 +18,11 @@ interactions mirror [opencast-grid](https://github.com/kingwap99/opencast-grid)
 
 ## Other features
 
-- Custom go2rtc URL (the built-in default is only an example, set yours in the gear menu)
+- Custom go2rtc URL (the built-in default is only an example; click the "go2rtc: ..." pill in the toolbar to set yours)
 - Tick the cameras you want from the go2rtc stream list, with search, reordering and a "select all online" button
 - Automatic "H.264 playable counterpart": a HEVC-only stream is transparently replaced by an
   existing `#video=h264` transcode of the same camera (e.g. `cam1` -> `cam1_h264`);
-  the picker marks those with `->`. Streams without a counterpart fall back to MJPEG
+  the picker marks those with `→`. Streams without a counterpart fall back to MJPEG
   after 12 seconds without a picture
 - Selection, layout, hero and volume are **stored in one shared server-side file** (`wall.json`),
   so another computer or another browser sees exactly the same wall; localStorage is only an offline fallback
@@ -69,7 +69,14 @@ the WebSocket to go2rtc, keeping the whole page same-origin on :8082. You can st
 
 ## Install as a service (macOS)
 
-    bash install.sh     # start now + register as a launchd system daemon (needs sudo)
+    bash install.sh       # start now + register as a launchd system daemon (needs sudo)
+    bash install.sh 9000  # optional: listen on another port (default 8082)
+
+`install.sh` fills in this machine's directory, user and `python3` by rendering the
+checked-in launchd template `com.go2rtc.wall.plist`, so the checkout can live
+anywhere. It then waits for `/api/health` and reports a failure if the daemon is not
+actually serving - under `KeepAlive` a wrong interpreter or an occupied port would
+otherwise become a silent crash loop (see `server.log` in this folder).
 
 ## Home Assistant add-on
 
@@ -91,14 +98,18 @@ backups). The wall is also embedded in Home Assistant's sidebar via ingress.
 
 ## Files
 
-    server.py       HTTP + WebSocket proxy (Python standard library)
-    index.html      the wall page
-    css/style.css   styling (hero + ring layout)
-    js/app.js       wall logic (mirrors the opencast-grid interactions)
-    js/video-rtc.js go2rtc playback core (v1.9.14, unmodified)
-    assets/icon.svg icon
-    addon/          Home Assistant add-on (config.yaml, Dockerfile, run.sh, DOCS.md)
-    repository.yaml Home Assistant add-on repository metadata
-    README.md       this document
-    settings.json   the configured go2rtc URL (generated automatically)
-    wall.json       shared wall settings (cameras / layout / hero / volume, generated automatically)
+    server.py             HTTP + WebSocket proxy (Python standard library)
+    index.html            the wall page
+    css/style.css         styling (hero + ring layout)
+    js/app.js             wall logic (mirrors the opencast-grid interactions)
+    js/video-rtc.js       go2rtc playback core (v1.9.14, unmodified)
+    assets/icon.svg       icon
+    manifest.json         PWA manifest
+    install.sh            macOS service installer (fills in this machine's paths)
+    com.go2rtc.wall.plist launchd template rendered by install.sh
+    addon/                Home Assistant add-on (config.yaml, Dockerfile, run.sh, DOCS.md)
+    repository.yaml       Home Assistant add-on repository metadata
+    README.md             this document
+    settings.json         the configured go2rtc URL (generated automatically)
+    wall.json             shared wall settings (cameras / layout / hero / volume, generated automatically)
+    server.log            service log written by the launchd daemon (generated automatically)
