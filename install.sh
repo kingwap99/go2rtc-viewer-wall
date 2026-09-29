@@ -10,7 +10,9 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/kingwap99/go2rtc-viewer-wall/main/install.sh | bash
 #
-# G2RW_DIR picks another download folder, G2RW_REF another branch or tag.
+# G2RW_DIR picks another download folder, G2RW_REF another branch or tag, and
+# G2RW_FORCE=1 re-downloads instead of reusing the folder already there - that is how
+# you update an install that came from the one-liner above.
 #
 # com.go2rtc.wall.plist is a template: this script substitutes this machine's
 # directory, user and interpreter into it, so a checkout works wherever it lives.
@@ -28,6 +30,7 @@ esac
 REPO_SLUG="kingwap99/go2rtc-viewer-wall"
 REF="${G2RW_REF:-main}"
 DEST="${G2RW_DIR:-$HOME/go2rtc-viewer-wall}"
+FORCE="${G2RW_FORCE:-0}"
 LABEL="com.go2rtc.wall"
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -45,22 +48,35 @@ is_checkout() {
 # one-liner, an unrelated shell - downloads the repository first, so "download and
 # install" is one command.
 if ! is_checkout "$APP_DIR"; then
-  if is_checkout "$DEST"; then
-    echo "using the existing checkout in $DEST"
+  if is_checkout "$DEST" && [ "$FORCE" != "1" ]; then
+    echo "using the existing checkout in $DEST (G2RW_FORCE=1 re-downloads it)"
   else
     if [ "$DRY_RUN" = "1" ]; then
-      echo "no checkout here - would download $REPO_SLUG ($REF) to $DEST" >&2
+      if is_checkout "$DEST"; then
+        echo "no checkout here - would refresh $DEST from $REPO_SLUG ($REF)" >&2
+      else
+        echo "no checkout here - would download $REPO_SLUG ($REF) to $DEST" >&2
+      fi
       exit 0
     fi
-    if [ -e "$DEST" ]; then
-      echo "$DEST exists but is not a go2rtc Viewer Wall checkout; set G2RW_DIR to use another folder" >&2
+    if [ -d "$DEST/.git" ]; then
+      echo "$DEST is a git clone - update it with 'git -C $DEST pull' instead" >&2
+      exit 1
+    fi
+    if [ -e "$DEST" ] && ! is_checkout "$DEST" && [ "$FORCE" != "1" ]; then
+      echo "$DEST exists but is not a go2rtc Viewer Wall checkout." >&2
+      echo "Point G2RW_DIR somewhere else, or set G2RW_FORCE=1 to overwrite it." >&2
       exit 1
     fi
     if ! command -v curl >/dev/null 2>&1; then
       echo "curl not found - clone the repository yourself and run install.sh inside it" >&2
       exit 1
     fi
-    echo "downloading $REPO_SLUG ($REF) to $DEST"
+    if is_checkout "$DEST"; then
+      echo "refreshing $DEST from $REPO_SLUG ($REF)"
+    else
+      echo "downloading $REPO_SLUG ($REF) to $DEST"
+    fi
     mkdir -p "$DEST"
     if ! curl -fsSL "https://codeload.github.com/$REPO_SLUG/tar.gz/refs/heads/$REF" \
         | tar -xz -C "$DEST" --strip-components=1; then
