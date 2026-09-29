@@ -47,5 +47,5 @@ and because it sits in the HA config folder it is included in Home Assistant
 backups (the folder shows up as "CONFIG" on SMB/Windows shares; the path inside
 the add-on is lowercase /config). If the mount is not available on your
 Supervisor, the wall automatically falls back to
-`/data/go2rtc_viewer_wall.yaml` instead of failing. The go2rtc URL itself
-stays configured in the add-on options.
+`/data/wall.json` (the standalone JSON format) instead of failing. The go2rtc
+URL itself stays configured in the add-on options.
