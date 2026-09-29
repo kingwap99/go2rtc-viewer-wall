@@ -1,20 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template for install.sh, which substitutes __APP_DIR__, __PYTHON_BIN__,
+  __RUN_USER__, __LABEL__ and __PORT__ with this machine's values.
+
+  Do not copy this file to /Library/LaunchDaemons by hand: launchd would then
+  look for the literal placeholder names instead of your python3 and server.py.
+  Run "bash install.sh" (or "DRY_RUN=1 bash install.sh" to see the result first).
+-->
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>com.go2rtc.wall</string>
-  <key>UserName</key><string>neoyang</string>
+  <key>Label</key><string>__LABEL__</string>
+  <key>UserName</key><string>__RUN_USER__</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/python3</string>
-    <string>/Users/neoyang/go2rtc-wall/server.py</string>
-    <string>8082</string>
+    <string>__PYTHON_BIN__</string>
+    <string>__APP_DIR__/server.py</string>
+    <string>__PORT__</string>
   </array>
-  <key>WorkingDirectory</key><string>/Users/neoyang/go2rtc-wall</string>
+  <key>WorkingDirectory</key><string>__APP_DIR__</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>/Users/neoyang/go2rtc-wall/server.log</string>
-  <key>StandardErrorPath</key><string>/Users/neoyang/go2rtc-wall/server.log</string>
+  <key>StandardOutPath</key><string>__APP_DIR__/server.log</string>
+  <key>StandardErrorPath</key><string>__APP_DIR__/server.log</string>
 </dict>
 </plist>
-
