@@ -1,23 +1,129 @@
 #!/usr/bin/env bash
-# Install go2rtc Viewer Wall: start now + a system LaunchDaemon (starts at boot, restarts on crash)
-# Requires sudo (it will ask for your password)
+# Install go2rtc Viewer Wall: start now + a system LaunchDaemon (starts at boot, restarts on crash).
+# Requires sudo (it will ask for your password).
+#
+#   bash install.sh            # listen on 8082 (default)
+#   bash install.sh 9000       # listen on another port
+#   DRY_RUN=1 bash install.sh  # print the LaunchDaemon it would write, install nothing
+#
+# com.go2rtc.wall.plist is a template: this script substitutes this machine's
+# directory, user and interpreter into it, so a checkout works wherever it lives.
+# Do not copy the template straight to /Library/LaunchDaemons.
 set -euo pipefail
-APP_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLIST_SRC="$APP_DIR/com.go2rtc.wall.plist"
-PLIST_DST="/Library/LaunchDaemons/com.go2rtc.wall.plist"
 
-if [ ! -f "$PLIST_SRC" ]; then
-  echo "missing $PLIST_SRC - copy it together with server.py" >&2
+PORT="${1:-8082}"
+case "$PORT" in
+  ''|*[!0-9]*)
+    echo "port must be a number, got '$PORT'" >&2
+    exit 1
+    ;;
+esac
+
+APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+LABEL="com.go2rtc.wall"
+PLIST_TEMPLATE="$APP_DIR/$LABEL.plist"
+PLIST_DST="/Library/LaunchDaemons/$LABEL.plist"
+RUN_USER="${SUDO_USER:-$(id -un)}"
+PYTHON_BIN="$(command -v python3 || true)"
+
+if [ ! -f "$PLIST_TEMPLATE" ]; then
+  echo "missing $PLIST_TEMPLATE - copy it together with server.py" >&2
+  exit 1
+fi
+if [ ! -f "$APP_DIR/server.py" ]; then
+  echo "missing $APP_DIR/server.py - start from a full checkout of the repository" >&2
+  exit 1
+fi
+if [ -z "$PYTHON_BIN" ]; then
+  echo "python3 not found in PATH - install Python 3 (or the Xcode Command Line Tools) first" >&2
+  exit 1
+fi
+# launchd gives the daemon no shell and no PATH, so the interpreter has to work on
+# its own. /usr/bin/python3 is the Command Line Tools shim on macOS: without CLT it
+# only prompts for an install, which under launchd is a permanent crash loop.
+if ! "$PYTHON_BIN" -c 'import http.server, json, select, socket, urllib.request' >/dev/null 2>&1; then
+  echo "$PYTHON_BIN cannot import the standard library modules server.py needs." >&2
+  echo "Run this as your normal user (not 'sudo bash install.sh') so it uses your PATH python3." >&2
+  exit 1
+fi
+if [ "$RUN_USER" = "$(id -un)" ] && [ ! -w "$APP_DIR" ]; then
+  echo "$APP_DIR is not writable, but the daemon writes server.log there" >&2
   exit 1
 fi
 
-sudo launchctl bootout system/com.go2rtc.wall 2>/dev/null || true
-PID=\$(lsof -ti :8082 2>/dev/null || true); [ -n "\$PID" ] && kill \$PID 2>/dev/null || true
+# Fill the template with this machine's values (a checkout can live anywhere, so the
+# plist cannot hardcode a home directory, a user name or an interpreter).
+render_plist() {
+  G2RW_APP_DIR="$APP_DIR" \
+  G2RW_PYTHON_BIN="$PYTHON_BIN" \
+  G2RW_RUN_USER="$RUN_USER" \
+  G2RW_LABEL="$LABEL" \
+  G2RW_PORT="$PORT" \
+  "$PYTHON_BIN" - "$PLIST_TEMPLATE" <<'PY'
+import os
+import sys
 
-sudo cp "$PLIST_SRC" "$PLIST_DST"
+text = open(sys.argv[1], encoding="utf-8").read()
+for key, value in {
+    "__APP_DIR__": os.environ["G2RW_APP_DIR"],
+    "__PYTHON_BIN__": os.environ["G2RW_PYTHON_BIN"],
+    "__RUN_USER__": os.environ["G2RW_RUN_USER"],
+    "__LABEL__": os.environ["G2RW_LABEL"],
+    "__PORT__": os.environ["G2RW_PORT"],
+}.items():
+    text = text.replace(key, value)
+sys.stdout.write(text)
+PY
+}
+
+if [ "${DRY_RUN:-0}" = "1" ]; then
+  render_plist
+  echo "(DRY_RUN=1: nothing was installed)" >&2
+  exit 0
+fi
+
+sudo launchctl bootout "system/$LABEL" 2>/dev/null || true
+
+# Free the port if server.py was also started by hand: otherwise the daemon binds
+# nothing and KeepAlive turns that into a crash loop.
+if command -v lsof >/dev/null 2>&1; then
+  STALE_PID="$(lsof -ti ":$PORT" 2>/dev/null || true)"
+  if [ -n "$STALE_PID" ]; then
+    echo "stopping the process already listening on $PORT (pid $STALE_PID)"
+    kill $STALE_PID 2>/dev/null || true
+    sleep 1
+  fi
+fi
+
+render_plist | plutil -lint - >/dev/null
+render_plist | sudo tee "$PLIST_DST" >/dev/null
 sudo chmod 644 "$PLIST_DST"
+sudo chown root:wheel "$PLIST_DST"
 sudo launchctl bootstrap system "$PLIST_DST" 2>/dev/null || sudo launchctl load "$PLIST_DST"
-sleep 2
+
+# A wrong interpreter or a busy port leaves a daemon that crash-loops under
+# KeepAlive, so prove it is serving before reporting success.
+HEALTHY=0
+if command -v curl >/dev/null 2>&1; then
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -fsS -m 2 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
+      HEALTHY=1
+      break
+    fi
+    sleep 0.5
+  done
+else
+  echo "curl not found - skipping the post-install health check" >&2
+  HEALTHY=1
+fi
 
 LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo 127.0.0.1)"
-echo "installed: http://${LAN_IP}:8082/  (open it from any device on your LAN)"
+if [ "$HEALTHY" = "1" ]; then
+  echo "installed and running: http://$LAN_IP:$PORT/  (open it from any device on your LAN)"
+else
+  echo "installed, but http://127.0.0.1:$PORT/api/health never answered." >&2
+  echo "the daemon is probably crash-looping; check:" >&2
+  echo "  tail -n 40 $APP_DIR/server.log" >&2
+  echo "  sudo launchctl print system/$LABEL" >&2
+  exit 1
+fi
